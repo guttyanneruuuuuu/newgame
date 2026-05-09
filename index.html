@@ -1,0 +1,3666 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#070b18">
+  <title>Aether Drift : Ascension</title>
+  <style>
+    :root {
+      --bg-top: #070b18;
+      --bg-mid: #0b1428;
+      --bg-bottom: #03060f;
+      --panel: rgba(10, 18, 34, 0.78);
+      --panel-2: rgba(20, 32, 56, 0.65);
+      --panel-border: rgba(167, 230, 255, 0.18);
+      --text: #ebfdff;
+      --muted: rgba(228, 246, 255, 0.7);
+      --dim: rgba(228, 246, 255, 0.45);
+      --accent: #5ef6ff;
+      --accent-2: #ffdf73;
+      --accent-3: #c1a3ff;
+      --danger: #ff7b8c;
+      --good: #83f8be;
+      --gold: #ffd866;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+      --safe-bottom: max(20px, env(safe-area-inset-bottom));
+      --safe-top: max(14px, env(safe-area-inset-top));
+      --safe-left: max(12px, env(safe-area-inset-left));
+      --safe-right: max(12px, env(safe-area-inset-right));
+
+      --r-common: #b9c6d6;
+      --r-rare: #6dd1ff;
+      --r-epic: #c592ff;
+      --r-legend: #ffcb5c;
+      --r-mythic: #ff7ad6;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 12%, rgba(94, 246, 255, 0.20), transparent 36%),
+        radial-gradient(circle at 82% 18%, rgba(193, 163, 255, 0.18), transparent 30%),
+        radial-gradient(circle at 50% 95%, rgba(255, 122, 214, 0.12), transparent 36%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-mid) 48%, var(--bg-bottom));
+      font-family: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      touch-action: none;
+      overscroll-behavior: none;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -10%;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      opacity: 0.35;
+      background:
+        radial-gradient(circle at 30% 35%, rgba(82, 255, 241, 0.25), transparent 30%),
+        radial-gradient(circle at 72% 28%, rgba(170, 140, 255, 0.22), transparent 24%),
+        radial-gradient(circle at 60% 80%, rgba(255, 145, 200, 0.18), transparent 28%);
+      animation: driftGlow 16s ease-in-out infinite alternate;
+      z-index: 0;
+    }
+
+    @keyframes driftGlow {
+      from { transform: translate3d(-2%, -1%, 0) scale(1); }
+      to { transform: translate3d(3%, 2%, 0) scale(1.08); }
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    /* ============ Screens ============ */
+    .screen {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .screen.hidden { display: none !important; }
+
+    .screen-inner {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 14px 14px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ============ Top bar (currencies) ============ */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 8;
+      display: flex;
+      gap: 8px;
+      padding: 8px 0 6px;
+      background: linear-gradient(180deg, rgba(7,11,24,0.92), rgba(7,11,24,0.55) 80%, transparent);
+      backdrop-filter: blur(10px);
+    }
+
+    .currency {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: rgba(20, 32, 56, 0.55);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-weight: 800;
+      font-size: 0.92rem;
+      letter-spacing: 0.02em;
+      min-width: 0;
+    }
+
+    .currency .ico {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 0.75rem;
+      box-shadow: inset 0 0 8px rgba(255,255,255,0.25);
+    }
+    .ico.core { background: radial-gradient(circle at 30% 30%, #aef9ff, #2db9ff 70%); color: #061a2a; }
+    .ico.gem { background: radial-gradient(circle at 30% 30%, #f6c4ff, #b35bff 70%); color: #1a0a30; }
+    .ico.dust { background: radial-gradient(circle at 30% 30%, #fff1ad, #ff9f4a 70%); color: #2a1404; }
+
+    .currency .val { flex: 1; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ============ Title block ============ */
+    .title-block {
+      text-align: center;
+      padding: 14px 6px 4px;
+    }
+    .eyebrow {
+      font-size: 0.7rem;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(192, 243, 255, 0.7);
+      margin-bottom: 6px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(2.0rem, 9vw, 3.2rem);
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      background: linear-gradient(135deg, #c8ff8b 0%, #5ef6ff 45%, #c1a3ff 90%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 4px 22px rgba(94,246,255,0.25));
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.4rem, 5.4vw, 1.8rem);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .lead {
+      margin: 6px auto 0;
+      max-width: 520px;
+      line-height: 1.6;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    /* ============ Card / Panel ============ */
+    .panel {
+      background: linear-gradient(180deg, rgba(15, 26, 50, 0.78), rgba(8, 16, 30, 0.72));
+      border: 1px solid var(--panel-border);
+      border-radius: 22px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px) saturate(135%);
+    }
+
+    .panel h3 {
+      margin: 0 0 10px;
+      font-size: 1.05rem;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel h3 .pill {
+      font-size: 0.62rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--muted);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    /* ============ Buttons ============ */
+    button, .btn {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      padding: 13px 18px;
+      font: inherit;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #03101c;
+      background: linear-gradient(135deg, #c8ff8b, #5ef6ff 70%);
+      box-shadow: 0 10px 28px rgba(94, 246, 255, 0.28);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, filter 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    button:active, .btn:active { transform: translateY(1px) scale(0.98); }
+
+    button.secondary, .btn.secondary {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    button.gem-btn {
+      background: linear-gradient(135deg, #f6c4ff, #b35bff 70%);
+      color: #fff;
+      box-shadow: 0 10px 28px rgba(179,91,255,0.35);
+    }
+
+    button.gold-btn {
+      background: linear-gradient(135deg, #fff1ad, #ff9f4a 70%);
+      color: #2a1404;
+      box-shadow: 0 10px 28px rgba(255,159,74,0.35);
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, #ff7b8c, #ff5b6e 70%);
+      color: #fff;
+      box-shadow: 0 10px 28px rgba(255,123,140,0.35);
+    }
+
+    button:disabled, .btn:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+      filter: grayscale(0.3);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-row > button, .btn-row > .btn { flex: 1; min-width: 130px; }
+
+    /* ============ Tabs (bottom nav) ============ */
+    .tabbar {
+      position: sticky;
+      bottom: 0;
+      margin-top: auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 8px;
+      border-radius: 22px;
+      background: rgba(8, 14, 28, 0.85);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+    }
+
+    .tab-btn {
+      background: transparent;
+      box-shadow: none;
+      color: var(--muted);
+      border-radius: 16px;
+      padding: 10px 4px;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 56px;
+      font-weight: 700;
+    }
+    .tab-btn .ti {
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+    .tab-btn.active {
+      background: linear-gradient(180deg, rgba(94,246,255,0.18), rgba(94,246,255,0.05));
+      color: var(--text);
+      border: 1px solid rgba(94,246,255,0.3);
+    }
+
+    /* ============ Stage select ============ */
+    .stage-list { display: grid; gap: 10px; }
+    .stage-card {
+      position: relative;
+      padding: 14px 14px 14px 70px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .stage-card.locked { opacity: 0.55; cursor: not-allowed; }
+    .stage-card:not(.locked):active { transform: scale(0.985); }
+    .stage-card.cleared { border-color: rgba(131,248,190,0.4); }
+
+    .stage-num {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 1.4rem;
+      background: linear-gradient(135deg, #5ef6ff, #c1a3ff);
+      color: #061227;
+      box-shadow: 0 6px 18px rgba(94,246,255,0.25);
+    }
+    .stage-card.locked .stage-num {
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.5);
+      box-shadow: none;
+    }
+
+    .stage-title { font-weight: 800; font-size: 1.02rem; margin-bottom: 3px; }
+    .stage-meta { color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+    .stage-meta .star { color: var(--gold); letter-spacing: 0.05em; }
+    .stage-meta .star .gray { color: rgba(255,255,255,0.18); }
+
+    .stage-rewards {
+      margin-top: 6px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .stage-rewards span {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* ============ Inventory / Equipment ============ */
+    .equip-slots {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .equip-slot {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    .equip-slot:active { transform: scale(0.98); }
+    .equip-slot .slot-label {
+      font-size: 0.66rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 4px;
+    }
+    .equip-slot .slot-name {
+      font-weight: 800;
+      font-size: 0.96rem;
+      margin-bottom: 2px;
+    }
+    .equip-slot .slot-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .item-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .item-card {
+      position: relative;
+      padding: 12px 10px 10px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+      overflow: hidden;
+    }
+    .item-card:active { transform: scale(0.97); }
+    .item-card.equipped { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(94,246,255,0.25); }
+    .item-card .rarity-bar {
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .rarity-1 .rarity-bar { background: var(--r-common); }
+    .rarity-2 .rarity-bar { background: var(--r-rare); }
+    .rarity-3 .rarity-bar { background: var(--r-epic); }
+    .rarity-4 .rarity-bar { background: var(--r-legend); }
+    .rarity-5 .rarity-bar { background: linear-gradient(90deg, var(--r-mythic), var(--r-legend), var(--r-epic)); }
+
+    .item-card .ic {
+      width: 100%;
+      aspect-ratio: 1.3 / 1;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 1.8rem;
+      margin-bottom: 6px;
+      background: rgba(255,255,255,0.04);
+    }
+    .rarity-1 .ic { background: radial-gradient(circle at 30% 30%, rgba(185,198,214,0.3), rgba(185,198,214,0.06)); color: #d6e0eb; }
+    .rarity-2 .ic { background: radial-gradient(circle at 30% 30%, rgba(109,209,255,0.35), rgba(109,209,255,0.08)); color: #b6e7ff; }
+    .rarity-3 .ic { background: radial-gradient(circle at 30% 30%, rgba(197,146,255,0.35), rgba(197,146,255,0.08)); color: #e0caff; }
+    .rarity-4 .ic { background: radial-gradient(circle at 30% 30%, rgba(255,203,92,0.4), rgba(255,203,92,0.08)); color: #ffe9b0; }
+    .rarity-5 .ic { background: radial-gradient(circle at 30% 30%, rgba(255,122,214,0.45), rgba(193,163,255,0.1)); color: #ffc6ec; animation: mythicGlow 2.4s ease-in-out infinite; }
+    @keyframes mythicGlow { 0%,100% { box-shadow: 0 0 0 rgba(255,122,214,0); } 50% { box-shadow: 0 0 22px rgba(255,122,214,0.45); } }
+
+    .item-card .iname {
+      font-weight: 800;
+      font-size: 0.86rem;
+      line-height: 1.2;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .item-card .ilvl {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .item-card .ibadge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      font-size: 0.6rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(94,246,255,0.2);
+      color: #b6f6ff;
+      border: 1px solid rgba(94,246,255,0.4);
+      letter-spacing: 0.08em;
+    }
+    .item-card.equipped .ibadge { background: rgba(94,246,255,0.4); }
+
+    .empty-hint {
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+      border: 1px dashed rgba(255,255,255,0.12);
+      border-radius: 14px;
+    }
+
+    /* ============ Modal ============ */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(2,5,12,0.7);
+      backdrop-filter: blur(8px);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .modal-bg.hidden { display: none !important; }
+    .modal {
+      width: 100%;
+      max-width: 460px;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 18px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(15, 26, 50, 0.96), rgba(8, 16, 30, 0.96));
+      border: 1px solid var(--panel-border);
+      box-shadow: var(--shadow);
+    }
+    .modal h3 { margin: 0 0 10px; font-size: 1.2rem; }
+    .modal .close-x {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      box-shadow: none;
+      color: var(--text);
+      padding: 0;
+      font-size: 1.1rem;
+      min-height: 0;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      font-size: 0.92rem;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row .lab { color: var(--muted); }
+    .stat-row .val { font-weight: 800; }
+    .stat-row .delta { color: var(--good); font-size: 0.85rem; margin-left: 6px; }
+
+    /* ============ Toast ============ */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--safe-bottom) + 100px);
+      transform: translateX(-50%) translateY(20px);
+      z-index: 80;
+      padding: 11px 18px;
+      border-radius: 999px;
+      background: rgba(5, 13, 24, 0.92);
+      border: 1px solid rgba(130, 241, 255, 0.25);
+      color: #f1fdff;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      max-width: 88vw;
+      text-align: center;
+      font-size: 0.92rem;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ============ HUD ============ */
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
+    #hud.hidden { display: none !important; }
+
+    .hud-top {
+      position: absolute;
+      top: var(--safe-top);
+      left: var(--safe-left);
+      right: var(--safe-right);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .hud-box {
+      min-width: 0;
+      padding: 9px 12px;
+      border-radius: 16px;
+      background: rgba(8, 15, 24, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+    }
+    .hud-label {
+      display: block;
+      font-size: 0.62rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(194, 241, 255, 0.7);
+      margin-bottom: 3px;
+    }
+    .hud-value {
+      font-size: clamp(0.95rem, 3.4vw, 1.15rem);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .hud-sub {
+      font-size: 0.78rem;
+      color: rgba(234, 249, 255, 0.78);
+      margin-top: 2px;
+    }
+
+    .hud-bottom {
+      position: absolute;
+      left: var(--safe-left);
+      right: var(--safe-right);
+      bottom: calc(var(--safe-bottom) + 6px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .meter-stack { flex: 1; min-width: 0; display: grid; gap: 8px; }
+    .meter-card {
+      padding: 8px 12px 10px;
+      border-radius: 16px;
+      background: rgba(7, 14, 24, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+    }
+    .meter-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      color: rgba(235, 250, 255, 0.82);
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+    .meter {
+      height: 9px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .fill {
+      width: 0%;
+      height: 100%;
+      transition: width 0.18s ease;
+    }
+    #missionFill { background: linear-gradient(90deg, #88f8b6, #6ee9ff 58%, #fff09d); }
+    #chargeFill { background: linear-gradient(90deg, #5ef6ff, #80ffca 55%, #fff6b0); }
+    #hpFill { background: linear-gradient(90deg, #ff7b8c, #ffd66a 55%, #83f8be); }
+
+    .hud-buttons {
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+      flex-direction: column;
+    }
+    .hud-buttons button {
+      min-width: 70px;
+      min-height: 38px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      background: rgba(255,255,255,0.1);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: none;
+    }
+
+    /* ============ Result panel (overlay) ============ */
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin: 14px 0;
+    }
+    .result-box {
+      padding: 12px 10px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      text-align: center;
+    }
+    .result-box .small {
+      display: block;
+      font-size: 0.66rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 4px;
+    }
+    .result-box strong {
+      font-size: 1.25rem;
+      letter-spacing: 0.02em;
+    }
+
+    .reward-list {
+      display: grid;
+      gap: 8px;
+      margin: 10px 0 4px;
+    }
+    .reward-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      animation: slideIn 0.4s ease both;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(-12px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* ============ Gacha animation ============ */
+    .gacha-stage {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 50% 45%, rgba(60, 40, 90, 0.85), rgba(2, 5, 12, 0.96));
+      backdrop-filter: blur(8px);
+    }
+    .gacha-stage.hidden { display: none !important; }
+
+    .gacha-orb {
+      width: min(72vw, 280px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff7c2, #ff9bd6 35%, #815bff 75%, #1a0a40);
+      box-shadow:
+        0 0 60px 10px rgba(255,155,214,0.4),
+        0 0 120px 20px rgba(129,91,255,0.3),
+        inset -20px -30px 60px rgba(0,0,0,0.4);
+      animation: orbSpin 1.6s linear infinite, orbPulse 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes orbSpin { to { transform: rotate(360deg); } }
+    @keyframes orbPulse {
+      from { filter: hue-rotate(0deg) brightness(1); }
+      to { filter: hue-rotate(60deg) brightness(1.18); }
+    }
+
+    .gacha-burst {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .gacha-result-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 65;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--safe-top) 16px var(--safe-bottom);
+      overflow-y: auto;
+      background: radial-gradient(circle at 50% 30%, rgba(80, 50, 130, 0.8), rgba(2, 5, 12, 0.96));
+    }
+    .gacha-result-screen.hidden { display: none !important; }
+
+    .gacha-pulled {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+      width: 100%;
+      max-width: 520px;
+      margin: 16px 0;
+    }
+    .gacha-pulled .item-card {
+      animation: popIn 0.5s ease both;
+    }
+    .gacha-pulled .item-card:nth-child(2) { animation-delay: 0.08s; }
+    .gacha-pulled .item-card:nth-child(3) { animation-delay: 0.16s; }
+    .gacha-pulled .item-card:nth-child(4) { animation-delay: 0.24s; }
+    .gacha-pulled .item-card:nth-child(5) { animation-delay: 0.32s; }
+    .gacha-pulled .item-card:nth-child(6) { animation-delay: 0.40s; }
+    .gacha-pulled .item-card:nth-child(7) { animation-delay: 0.48s; }
+    .gacha-pulled .item-card:nth-child(8) { animation-delay: 0.56s; }
+    .gacha-pulled .item-card:nth-child(9) { animation-delay: 0.64s; }
+    .gacha-pulled .item-card:nth-child(10) { animation-delay: 0.72s; }
+    @keyframes popIn {
+      from { transform: scale(0.4) rotate(-12deg); opacity: 0; }
+      to { transform: scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* ============ Misc ============ */
+    .hp-pips {
+      display: inline-flex;
+      gap: 3px;
+      margin-left: 6px;
+    }
+    .pip {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .pip.on { background: linear-gradient(135deg, #ff7b8c, #ffd66a); border-color: rgba(255,255,255,0.6); }
+
+    /* ============ Touch joystick ============ */
+    .joy {
+      position: fixed;
+      z-index: 6;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: rgba(8, 15, 28, 0.45);
+      border: 1px solid rgba(255,255,255,0.18);
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+      display: none;
+    }
+    .joy.show { display: block; }
+    .joy .nob {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #c8feff, #5ef6ff 65%, #2a8fbf);
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 14px rgba(94,246,255,0.5);
+    }
+
+    /* ============ Settings sliders ============ */
+    .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+    .row label { flex: 1; font-size: 0.9rem; color: var(--muted); }
+    .row .v { font-weight: 800; color: var(--text); min-width: 56px; text-align: right; }
+    input[type="range"] {
+      flex: 2;
+      width: 100%;
+      accent-color: #5ef6ff;
+      height: 24px;
+    }
+
+    /* ============ Tutorial ============ */
+    .tut-step {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 8px;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+    .tut-step b { color: var(--accent); }
+
+    /* === Smaller screens: tighten spacing === */
+    @media (max-width: 380px) {
+      .equip-slots, .item-grid { grid-template-columns: 1fr; }
+      .panel { padding: 12px; }
+      h1 { font-size: 2rem; }
+    }
+
+    /* Boss banner */
+    .boss-banner {
+      position: fixed;
+      left: 50%;
+      top: 28%;
+      transform: translate(-50%, -50%);
+      z-index: 7;
+      padding: 16px 24px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(255,80,120,0.92), rgba(180,40,180,0.85));
+      border: 1px solid rgba(255,255,255,0.25);
+      box-shadow: 0 14px 44px rgba(255,80,120,0.4);
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-size: 1.1rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .boss-banner.show { opacity: 1; }
+
+    .boss-bar-wrap {
+      position: fixed;
+      left: 50%;
+      top: calc(var(--safe-top) + 86px);
+      transform: translateX(-50%);
+      width: min(86vw, 440px);
+      z-index: 4;
+      pointer-events: none;
+      display: none;
+    }
+    .boss-bar-wrap.show { display: block; }
+    .boss-bar-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #ffd9e0;
+      margin-bottom: 4px;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.6);
+    }
+    .boss-bar {
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .boss-bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff5b6e, #ffd66a);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- ===================== HOME / TITLE ===================== -->
+  <div id="screen-home" class="screen">
+    <div class="screen-inner">
+      <div class="topbar">
+        <div class="currency"><div class="ico core">✦</div><div class="val" id="cur-core">0</div></div>
+        <div class="currency"><div class="ico gem">◆</div><div class="val" id="cur-gem">0</div></div>
+        <div class="currency"><div class="ico dust">★</div><div class="val" id="cur-dust">0</div></div>
+      </div>
+
+      <div class="title-block">
+        <div class="eyebrow">Gyro Arcade · Ascension</div>
+        <h1>Aether Drift</h1>
+        <p class="lead">端末を傾けて宇宙を駆け抜けろ。装備を集め、強化し、5つのステージを征服せよ。</p>
+      </div>
+
+      <div class="panel">
+        <h3>進行状況 <span class="pill" id="progress-pill">STAGE 1 / 5</span></h3>
+        <div id="progress-summary" style="font-size:0.92rem; color:var(--muted); line-height:1.55;"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button id="btn-quickplay">⚡ クイックプレイ</button>
+          <button id="btn-continue" class="secondary">▶ 続きから</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>装備状態 <span class="pill" id="equip-power">POWER 0</span></h3>
+        <div class="equip-slots" id="equipSlotsHome"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="secondary" data-tab="inventory">装備管理</button>
+          <button class="secondary" data-tab="gacha">ガチャ</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>設定</h3>
+        <div class="row">
+          <label for="sensSlider">ジャイロ感度</label>
+          <input id="sensSlider" type="range" min="0.5" max="2.0" step="0.05" value="1.0">
+          <span class="v" id="sensVal">1.00x</span>
+        </div>
+        <div class="row">
+          <label for="deadSlider">デッドゾーン</label>
+          <input id="deadSlider" type="range" min="0" max="0.2" step="0.01" value="0.05">
+          <span class="v" id="deadVal">0.05</span>
+        </div>
+        <div class="row">
+          <label>サウンド</label>
+          <button id="btn-mute" class="secondary" style="flex:0 0 auto; min-height:36px; padding:8px 14px;">🔊 ON</button>
+        </div>
+        <div class="row">
+          <label>振動</label>
+          <button id="btn-vib" class="secondary" style="flex:0 0 auto; min-height:36px; padding:8px 14px;">📳 ON</button>
+        </div>
+        <p style="font-size:0.82rem; color:var(--dim); margin: 6px 0 0; line-height:1.5;">
+          iOS の場合、初回プレイ時にモーション許可ダイアログが出ます。許可すると傾けて操作できます。
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>遊びかた</h3>
+        <div class="tut-step"><b>① 傾ける</b> — 端末を左右に傾けると機体が動きます。前後で上下移動。</div>
+        <div class="tut-step"><b>② 弾は自動射撃</b> — 当てるだけで敵を破壊。コア✦が稼げます。</div>
+        <div class="tut-step"><b>③ ニアミスで FLOW</b> — ギリギリ回避と連続撃破で倍率UP！100%でOVERDRIVE発動。</div>
+        <div class="tut-step"><b>④ 強化&装備</b> — ✦コアでガチャ、★スターダストで装備強化。</div>
+        <div class="tut-step"><b>⑤ ステージ攻略</b> — クリアで次ステージ解放。最終ステージにはボスが待つ。</div>
+      </div>
+
+      <div class="tabbar">
+        <button class="tab-btn active" data-tab="home"><span class="ti">🚀</span>ホーム</button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== STAGE SELECT ===================== -->
+  <div id="screen-stages" class="screen hidden">
+    <div class="screen-inner">
+      <div class="topbar">
+        <div class="currency"><div class="ico core">✦</div><div class="val" id="cur-core-s">0</div></div>
+        <div class="currency"><div class="ico gem">◆</div><div class="val" id="cur-gem-s">0</div></div>
+        <div class="currency"><div class="ico dust">★</div><div class="val" id="cur-dust-s">0</div></div>
+      </div>
+      <div class="title-block">
+        <div class="eyebrow">Mission Select</div>
+        <h2>ステージを選択</h2>
+        <p class="lead" style="font-size:0.9rem;">クリアで次が解放。星3達成で追加報酬。</p>
+      </div>
+      <div class="stage-list" id="stageList"></div>
+      <div class="tabbar">
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span>ホーム</button>
+        <button class="tab-btn active" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== INVENTORY / EQUIP ===================== -->
+  <div id="screen-inventory" class="screen hidden">
+    <div class="screen-inner">
+      <div class="topbar">
+        <div class="currency"><div class="ico core">✦</div><div class="val" id="cur-core-i">0</div></div>
+        <div class="currency"><div class="ico gem">◆</div><div class="val" id="cur-gem-i">0</div></div>
+        <div class="currency"><div class="ico dust">★</div><div class="val" id="cur-dust-i">0</div></div>
+      </div>
+      <div class="title-block">
+        <div class="eyebrow">Hangar</div>
+        <h2>装備管理</h2>
+      </div>
+      <div class="panel">
+        <h3>装備中 <span class="pill" id="equip-power-i">POWER 0</span></h3>
+        <div class="equip-slots" id="equipSlotsInv"></div>
+      </div>
+      <div class="panel">
+        <h3>所持アイテム <span class="pill" id="invCount">0</span></h3>
+        <div id="filterRow" class="btn-row" style="margin-bottom:10px;">
+          <button class="secondary" data-filter="all" style="flex:1; min-height:38px; padding:8px;">すべて</button>
+          <button class="secondary" data-filter="weapon" style="flex:1; min-height:38px; padding:8px;">武器</button>
+          <button class="secondary" data-filter="shield" style="flex:1; min-height:38px; padding:8px;">盾</button>
+          <button class="secondary" data-filter="engine" style="flex:1; min-height:38px; padding:8px;">機関</button>
+          <button class="secondary" data-filter="core" style="flex:1; min-height:38px; padding:8px;">コア</button>
+        </div>
+        <div class="item-grid" id="itemGrid"></div>
+      </div>
+      <div class="tabbar">
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span>ホーム</button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
+        <button class="tab-btn active" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== GACHA ===================== -->
+  <div id="screen-gacha" class="screen hidden">
+    <div class="screen-inner">
+      <div class="topbar">
+        <div class="currency"><div class="ico core">✦</div><div class="val" id="cur-core-g">0</div></div>
+        <div class="currency"><div class="ico gem">◆</div><div class="val" id="cur-gem-g">0</div></div>
+        <div class="currency"><div class="ico dust">★</div><div class="val" id="cur-dust-g">0</div></div>
+      </div>
+      <div class="title-block">
+        <div class="eyebrow">Aetherial Vault</div>
+        <h2>装備ガチャ</h2>
+        <p class="lead" style="font-size:0.9rem;">コア✦またはジェム◆で新装備をドロー。10連は星★3以上1個確定！</p>
+      </div>
+      <div class="panel">
+        <h3>スタンダード召喚 <span class="pill">CORE</span></h3>
+        <p style="color:var(--muted); font-size:0.86rem; line-height:1.55; margin: 0 0 10px;">
+          通常装備を入手。1回 200✦ / 10連 1800✦
+        </p>
+        <div class="btn-row">
+          <button id="btn-gacha-core1">1回 200✦</button>
+          <button id="btn-gacha-core10" class="gold-btn">10連 1800✦</button>
+        </div>
+        <div style="font-size:0.78rem; color:var(--dim); margin-top:8px;">
+          ★1 50% / ★2 35% / ★3 12% / ★4 2.8% / ★5 0.2%
+        </div>
+      </div>
+      <div class="panel">
+        <h3>プレミアム召喚 <span class="pill">GEM</span></h3>
+        <p style="color:var(--muted); font-size:0.86rem; line-height:1.55; margin: 0 0 10px;">
+          ジェムで★3以上のみ排出。1回 30◆ / 10連 270◆。<br>
+          天井: 90連で必ず★4以上 1個。
+        </p>
+        <div class="btn-row">
+          <button id="btn-gacha-gem1" class="gem-btn">1回 30◆</button>
+          <button id="btn-gacha-gem10" class="gem-btn">10連 270◆</button>
+        </div>
+        <div style="font-size:0.78rem; color:var(--dim); margin-top:8px;">
+          ★3 70% / ★4 24% / ★5 6%　　ピティ: <span id="pity-count">0</span> / 90
+        </div>
+      </div>
+      <div class="panel">
+        <h3>素材変換</h3>
+        <p style="color:var(--muted); font-size:0.86rem; line-height:1.55; margin: 0 0 10px;">
+          余った装備を分解して★スターダストに変換。強化素材になります。
+        </p>
+        <div class="btn-row">
+          <button id="btn-disassemble" class="secondary">★1〜★2を一括分解</button>
+        </div>
+      </div>
+      <div class="tabbar">
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span>ホーム</button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
+        <button class="tab-btn active" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="hud-box">
+        <span class="hud-label">Score</span>
+        <div class="hud-value" id="scoreText">0</div>
+        <div class="hud-sub" id="comboText">FLOW x1.0</div>
+      </div>
+      <div class="hud-box" style="text-align:right;">
+        <span class="hud-label">Hull</span>
+        <div class="hud-value" id="hpText"><span class="hp-pips" id="hpPips"></span></div>
+        <div class="hud-sub" id="modeText">GYRO</div>
+      </div>
+    </div>
+    <div class="boss-bar-wrap" id="bossBar">
+      <div class="boss-bar-head"><span id="bossName">BOSS</span><span id="bossHp">100%</span></div>
+      <div class="boss-bar"><div class="fill" id="bossFill" style="width:100%"></div></div>
+    </div>
+    <div class="hud-bottom">
+      <div class="meter-stack">
+        <div class="meter-card">
+          <div class="meter-head">
+            <span id="sectorText">Stage 1</span>
+            <span id="timeText">90.0s</span>
+          </div>
+          <div class="meter"><div class="fill" id="missionFill"></div></div>
+        </div>
+        <div class="meter-card">
+          <div class="meter-head">
+            <span>Overdrive</span>
+            <span id="chargeText">0%</span>
+          </div>
+          <div class="meter"><div class="fill" id="chargeFill"></div></div>
+        </div>
+      </div>
+      <div class="hud-buttons">
+        <button id="recenterBtn" type="button">再中心</button>
+        <button id="pauseBtn" type="button">PAUSE</button>
+      </div>
+    </div>
+  </div>
+  <div class="boss-banner" id="bossBanner">⚠ BOSS APPROACHING ⚠</div>
+  <div class="joy" id="joy"><div class="nob" id="joyNob"></div></div>
+
+  <!-- ===================== Result modal ===================== -->
+  <div class="modal-bg hidden" id="resultModal">
+    <div class="modal" style="position:relative;">
+      <div class="eyebrow" id="resultEyebrow" style="text-align:center;">Mission Result</div>
+      <h2 id="resultTitle" style="text-align:center;">Mission Clear</h2>
+      <p class="lead" id="resultLead" style="text-align:center; font-size:0.9rem; margin: 6px 0 12px;"></p>
+      <div class="result-grid">
+        <div class="result-box"><span class="small">Score</span><strong id="resultScore">0</strong></div>
+        <div class="result-box"><span class="small">Rank</span><strong id="resultRank">C</strong></div>
+        <div class="result-box"><span class="small">Best</span><strong id="resultBest">0</strong></div>
+        <div class="result-box"><span class="small">Stars</span><strong id="resultStars">★☆☆</strong></div>
+      </div>
+      <h3 style="font-size:0.95rem;">獲得報酬</h3>
+      <div class="reward-list" id="rewardList"></div>
+      <div class="btn-row" style="margin-top:14px;">
+        <button id="resultRetryBtn">もう一度</button>
+        <button id="resultMenuBtn" class="secondary">タイトル</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== Item detail modal ===================== -->
+  <div class="modal-bg hidden" id="itemModal">
+    <div class="modal" style="position:relative;">
+      <button class="close-x" id="itemModalClose">✕</button>
+      <h3 id="itemModalTitle">アイテム</h3>
+      <div id="itemModalBody"></div>
+    </div>
+  </div>
+
+  <!-- ===================== Gacha animation ===================== -->
+  <div class="gacha-stage hidden" id="gachaStage">
+    <div class="gacha-orb" id="gachaOrb"></div>
+    <div class="gacha-burst" id="gachaBurst"></div>
+  </div>
+  <div class="gacha-result-screen hidden" id="gachaResultScreen">
+    <div class="title-block" style="margin-top: 8px;">
+      <div class="eyebrow">Summon Result</div>
+      <h2 id="gachaResultTitle">召喚結果</h2>
+    </div>
+    <div class="gacha-pulled" id="gachaPulled"></div>
+    <div class="btn-row" style="max-width:520px; width:100%;">
+      <button id="gachaResultClose">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ===================== Toast ===================== -->
+  <div class="toast" id="toast" aria-live="polite"></div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    /* ============================================================
+       UTILITIES
+       ============================================================ */
+    const TAU = Math.PI * 2;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+    const fmt = (n) => Math.round(n).toLocaleString("ja-JP");
+    const $ = (id) => document.getElementById(id);
+
+    /* ============================================================
+       PERSISTENCE
+       ============================================================ */
+    const STORAGE_KEY = "aether-drift-ascension-v1";
+    const defaultSave = () => ({
+      currencies: { core: 500, gem: 30, dust: 0 },
+      stageStars: [0, 0, 0, 0, 0],   // 0..3 stars per stage
+      stageBest: [0, 0, 0, 0, 0],
+      unlockedStage: 1,              // highest unlocked stage (1..5)
+      lastStage: 1,
+      inventory: [],                 // [{id, type, rarity, level, name, ...}]
+      equipped: { weapon: null, shield: null, engine: null, core: null },
+      pity: 0,
+      settings: { sens: 1.0, dead: 0.05, mute: false, vibrate: true },
+      itemSeq: 1,
+      tutorialDone: false,
+      bestScore: 0
+    });
+
+    let save = defaultSave();
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          save = Object.assign(defaultSave(), parsed);
+          save.currencies = Object.assign(defaultSave().currencies, parsed.currencies || {});
+          save.settings = Object.assign(defaultSave().settings, parsed.settings || {});
+          save.equipped = Object.assign(defaultSave().equipped, parsed.equipped || {});
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    function persist() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+      } catch(e) { /* ignore */ }
+    }
+
+    /* ============================================================
+       DATA: Items
+       ============================================================ */
+    // Rarity 1=Common, 2=Rare, 3=Epic, 4=Legendary, 5=Mythic
+    const RARITY_NAMES = ["", "コモン", "レア", "エピック", "レジェンド", "ミシック"];
+    const RARITY_STARS = ["", "★", "★★", "★★★", "★★★★", "★★★★★"];
+
+    const ITEM_TEMPLATES = {
+      weapon: [
+        { name: "パルス・ピストル",   icon: "🔫", rarity: 1, baseDmg: 1.0, fireRate: 1.0, multiShot: 1 },
+        { name: "ツインブラスター",   icon: "💥", rarity: 2, baseDmg: 1.15, fireRate: 1.1, multiShot: 2 },
+        { name: "プラズマ・キャノン", icon: "⚡", rarity: 3, baseDmg: 1.35, fireRate: 1.0, multiShot: 1, pierce: 1 },
+        { name: "シャード・ライフル", icon: "🌟", rarity: 3, baseDmg: 1.25, fireRate: 1.25, multiShot: 2 },
+        { name: "イオン・トライデント", icon: "🔱", rarity: 4, baseDmg: 1.5, fireRate: 1.05, multiShot: 3 },
+        { name: "コメット・ボム",      icon: "☄️", rarity: 4, baseDmg: 1.8, fireRate: 0.9, multiShot: 1, splash: 1 },
+        { name: "アエテル・ランス",    icon: "✨", rarity: 5, baseDmg: 2.2, fireRate: 1.3, multiShot: 3, pierce: 1 }
+      ],
+      shield: [
+        { name: "鋼板シールド",   icon: "🛡️", rarity: 1, hp: 1, dr: 0 },
+        { name: "光学迷彩",        icon: "👁️", rarity: 2, hp: 1, dr: 0, dodge: 0.08 },
+        { name: "リアクティブ装甲",icon: "⚔️", rarity: 3, hp: 2, dr: 0 },
+        { name: "プリズム・バリア",icon: "💎", rarity: 3, hp: 1, dr: 0.15 },
+        { name: "イージスフィールド",icon: "🛡️", rarity: 4, hp: 2, dr: 0.2 },
+        { name: "フェニックス装甲",  icon: "🔥", rarity: 4, hp: 2, dr: 0.1, revive: 1 },
+        { name: "アエテル・コクーン",icon: "🌌", rarity: 5, hp: 3, dr: 0.25, dodge: 0.1 }
+      ],
+      engine: [
+        { name: "標準スラスター",  icon: "🚀", rarity: 1, speed: 1.0, agility: 1.0 },
+        { name: "高出力ブースター",icon: "💨", rarity: 2, speed: 1.10, agility: 1.05 },
+        { name: "クォーク・ドライブ",icon: "⚙️", rarity: 3, speed: 1.18, agility: 1.15 },
+        { name: "ジャイロ・ステア", icon: "🎯", rarity: 3, speed: 1.10, agility: 1.30 },
+        { name: "ホロウ・コア",    icon: "🌀", rarity: 4, speed: 1.25, agility: 1.25 },
+        { name: "ハイパー・ジャンプ",icon: "⚡", rarity: 4, speed: 1.35, agility: 1.20 },
+        { name: "ステラ・ウィング",  icon: "🪽", rarity: 5, speed: 1.45, agility: 1.45 }
+      ],
+      core: [
+        { name: "ベーシックコア",  icon: "🔋", rarity: 1, chargeRate: 1.0, scoreMul: 1.0 },
+        { name: "FLOWキャパシタ",  icon: "🌊", rarity: 2, chargeRate: 1.15, scoreMul: 1.05 },
+        { name: "コア・アンプ",     icon: "🔆", rarity: 3, chargeRate: 1.30, scoreMul: 1.12 },
+        { name: "ラッキー・スター", icon: "🍀", rarity: 3, chargeRate: 1.10, scoreMul: 1.0, lootBonus: 1.25 },
+        { name: "オーバーロード炉", icon: "💠", rarity: 4, chargeRate: 1.45, scoreMul: 1.20, odLength: 1.3 },
+        { name: "クロノ・コア",     icon: "⏳", rarity: 4, chargeRate: 1.30, scoreMul: 1.30, slowOnHit: 1 },
+        { name: "アエテル・ハート", icon: "💖", rarity: 5, chargeRate: 1.6, scoreMul: 1.45, odLength: 1.4, lootBonus: 1.4 }
+      ]
+    };
+
+    const TYPE_LABEL = { weapon: "武器", shield: "シールド", engine: "エンジン", core: "コア" };
+    const TYPE_ORDER = ["weapon", "shield", "engine", "core"];
+
+    function makeItem(type, template) {
+      return {
+        id: save.itemSeq++,
+        type,
+        templateName: template.name,
+        icon: template.icon,
+        rarity: template.rarity,
+        level: 1,
+        // mirror stats:
+        ...template
+      };
+    }
+
+    function rollGacha(banner) {
+      // banner: 'core' or 'gem'
+      // Returns one item template
+      const r = Math.random();
+      let rarity;
+      if (banner === "core") {
+        // 50/35/12/2.8/0.2
+        if (r < 0.50) rarity = 1;
+        else if (r < 0.85) rarity = 2;
+        else if (r < 0.97) rarity = 3;
+        else if (r < 0.998) rarity = 4;
+        else rarity = 5;
+      } else {
+        // gem: 70 / 24 / 6
+        if (r < 0.70) rarity = 3;
+        else if (r < 0.94) rarity = 4;
+        else rarity = 5;
+      }
+      return generateItemOfRarity(rarity);
+    }
+
+    function generateItemOfRarity(rarity) {
+      // Pick a random type, then pick template of that type with rarity matching (or fallback to nearest <=)
+      const type = pick(TYPE_ORDER);
+      const pool = ITEM_TEMPLATES[type].filter(t => t.rarity === rarity);
+      let tmpl;
+      if (pool.length === 0) {
+        // Fallback: pick from highest available rarity <= rarity
+        const fallback = ITEM_TEMPLATES[type].filter(t => t.rarity <= rarity);
+        tmpl = pick(fallback) || ITEM_TEMPLATES[type][0];
+      } else {
+        tmpl = pick(pool);
+      }
+      return makeItem(type, tmpl);
+    }
+
+    /* ============================================================
+       STAGES
+       ============================================================ */
+    const STAGES = [
+      {
+        index: 1,
+        name: "Sector 1: Dawn Shelf",
+        short: "Dawn Shelf",
+        duration: 70,
+        difficulty: 1.0,
+        colors: ["#081726", "#0b2137", "#153d48"],
+        patterns: ["lane", "slalom", "rings", "arc"],
+        cooldown: [1.4, 2.0],
+        bossAt: null,
+        rewardCore: [180, 240, 320],   // by stars
+        rewardGem: [3, 5, 8],
+        starThresholds: [3000, 6000, 10000]
+      },
+      {
+        index: 2,
+        name: "Sector 2: Glass Rain",
+        short: "Glass Rain",
+        duration: 80,
+        difficulty: 1.25,
+        colors: ["#071421", "#10263d", "#113955"],
+        patterns: ["lane", "mines", "beam", "rings", "arc", "slalom"],
+        cooldown: [1.15, 1.75],
+        bossAt: null,
+        rewardCore: [260, 360, 460],
+        rewardGem: [5, 8, 12],
+        starThresholds: [5000, 9000, 14000]
+      },
+      {
+        index: 3,
+        name: "Sector 3: Volt Maze",
+        short: "Volt Maze",
+        duration: 90,
+        difficulty: 1.55,
+        colors: ["#071219", "#171b3d", "#29315d"],
+        patterns: ["droneV", "beam", "rings", "mines", "arc", "doubleLane"],
+        cooldown: [1.0, 1.55],
+        bossAt: null,
+        rewardCore: [380, 500, 660],
+        rewardGem: [8, 12, 18],
+        starThresholds: [7000, 12000, 18000]
+      },
+      {
+        index: 4,
+        name: "Sector 4: Plasma Storm",
+        short: "Plasma Storm",
+        duration: 95,
+        difficulty: 1.85,
+        colors: ["#0a0c1a", "#231538", "#3a1c5e"],
+        patterns: ["droneV", "doubleBeam", "doubleLane", "mines", "arc", "rings"],
+        cooldown: [0.9, 1.35],
+        bossAt: null,
+        rewardCore: [500, 680, 880],
+        rewardGem: [12, 18, 24],
+        starThresholds: [10000, 16000, 24000]
+      },
+      {
+        index: 5,
+        name: "Sector 5: Eye of the Storm — Boss",
+        short: "Final Boss",
+        duration: 110,
+        difficulty: 2.2,
+        colors: ["#0a0612", "#2c0a3a", "#591242"],
+        patterns: ["doubleBeam", "droneV", "eyeSpiral", "doubleLane", "mines", "arc"],
+        cooldown: [0.8, 1.2],
+        bossAt: 70,   // boss at 70 seconds in
+        rewardCore: [800, 1100, 1500],
+        rewardGem: [20, 30, 45],
+        starThresholds: [14000, 22000, 32000]
+      }
+    ];
+
+    /* ============================================================
+       PLAYER STATS — derived from equipment
+       ============================================================ */
+    function getEquippedItem(slot) {
+      const id = save.equipped[slot];
+      if (id == null) return null;
+      return save.inventory.find(it => it.id === id) || null;
+    }
+
+    function levelMultiplier(level) {
+      // Level 1 = 1.0, each level +8%
+      return 1 + (level - 1) * 0.08;
+    }
+
+    function computeStats() {
+      const w = getEquippedItem("weapon");
+      const s = getEquippedItem("shield");
+      const e = getEquippedItem("engine");
+      const c = getEquippedItem("core");
+
+      const baseHp = 4;
+      const stats = {
+        hp: baseHp,
+        dr: 0,         // damage reduction
+        dodge: 0,
+        revive: 0,
+        damage: 1.0,
+        fireRate: 1.0,
+        multiShot: 1,
+        pierce: 0,
+        splash: 0,
+        speed: 1.0,
+        agility: 1.0,
+        chargeRate: 1.0,
+        scoreMul: 1.0,
+        lootBonus: 1.0,
+        odLength: 1.0,
+        slowOnHit: 0,
+        power: 0
+      };
+
+      if (w) {
+        const m = levelMultiplier(w.level);
+        stats.damage *= (w.baseDmg || 1) * m;
+        stats.fireRate *= (w.fireRate || 1);
+        stats.multiShot = Math.max(stats.multiShot, w.multiShot || 1);
+        if (w.pierce) stats.pierce = Math.max(stats.pierce, w.pierce);
+        if (w.splash) stats.splash = Math.max(stats.splash, w.splash);
+      }
+      if (s) {
+        const m = levelMultiplier(s.level);
+        stats.hp += (s.hp || 0);
+        stats.dr += (s.dr || 0) * m;
+        stats.dodge += (s.dodge || 0) * m;
+        stats.revive = Math.max(stats.revive, s.revive || 0);
+      }
+      if (e) {
+        const m = levelMultiplier(e.level);
+        stats.speed *= 1 + ((e.speed || 1) - 1) * m;
+        stats.agility *= 1 + ((e.agility || 1) - 1) * m;
+      }
+      if (c) {
+        const m = levelMultiplier(c.level);
+        stats.chargeRate *= 1 + ((c.chargeRate || 1) - 1) * m;
+        stats.scoreMul *= 1 + ((c.scoreMul || 1) - 1) * m;
+        stats.lootBonus *= 1 + ((c.lootBonus || 1) - 1) * m;
+        stats.odLength *= 1 + ((c.odLength || 1) - 1) * m;
+        stats.slowOnHit = Math.max(stats.slowOnHit, c.slowOnHit || 0);
+      }
+      stats.dr = clamp(stats.dr, 0, 0.6);
+      stats.dodge = clamp(stats.dodge, 0, 0.5);
+
+      // Power score (display only)
+      stats.power = Math.round(
+        stats.damage * 30 +
+        stats.hp * 12 +
+        stats.dr * 80 +
+        stats.dodge * 80 +
+        (stats.speed - 1) * 60 +
+        (stats.agility - 1) * 60 +
+        (stats.chargeRate - 1) * 50 +
+        (stats.scoreMul - 1) * 60 +
+        stats.multiShot * 18 +
+        stats.pierce * 14 +
+        stats.splash * 12 +
+        stats.revive * 30
+      );
+
+      return stats;
+    }
+
+    /* ============================================================
+       UI: Tabs / Screens
+       ============================================================ */
+    const screens = {
+      home: $("screen-home"),
+      stages: $("screen-stages"),
+      inventory: $("screen-inventory"),
+      gacha: $("screen-gacha")
+    };
+
+    function showScreen(name) {
+      Object.entries(screens).forEach(([k, el]) => {
+        el.classList.toggle("hidden", k !== name);
+      });
+      document.querySelectorAll(".tab-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.tab === name);
+      });
+      // refresh
+      if (name === "home") refreshHome();
+      else if (name === "stages") refreshStageList();
+      else if (name === "inventory") refreshInventory();
+      else if (name === "gacha") refreshGacha();
+      window.scrollTo(0, 0);
+      try { screens[name].scrollTop = 0; } catch(e){}
+    }
+
+    document.querySelectorAll("[data-tab]").forEach(b => {
+      b.addEventListener("click", () => showScreen(b.dataset.tab));
+    });
+
+    /* ============================================================
+       UI: Currency
+       ============================================================ */
+    function refreshCurrencies() {
+      const ids = ["cur-core","cur-gem","cur-dust","cur-core-s","cur-gem-s","cur-dust-s",
+                   "cur-core-i","cur-gem-i","cur-dust-i","cur-core-g","cur-gem-g","cur-dust-g"];
+      ids.forEach(id => {
+        const el = $(id);
+        if (!el) return;
+        if (id.startsWith("cur-core")) el.textContent = fmt(save.currencies.core);
+        else if (id.startsWith("cur-gem")) el.textContent = fmt(save.currencies.gem);
+        else if (id.startsWith("cur-dust")) el.textContent = fmt(save.currencies.dust);
+      });
+    }
+
+    /* ============================================================
+       UI: Home
+       ============================================================ */
+    function rarityClass(r) { return `rarity-${r}`; }
+
+    function renderEquippedSlots(container) {
+      container.innerHTML = "";
+      TYPE_ORDER.forEach(type => {
+        const it = getEquippedItem(type);
+        const div = document.createElement("div");
+        div.className = "equip-slot";
+        div.dataset.type = type;
+        if (it) {
+          div.innerHTML = `
+            <div class="slot-label">${TYPE_LABEL[type]}</div>
+            <div class="slot-name">${it.icon || ""} ${it.templateName}</div>
+            <div class="slot-sub">${RARITY_STARS[it.rarity]} · Lv${it.level}</div>
+          `;
+          div.classList.add(rarityClass(it.rarity));
+        } else {
+          div.innerHTML = `
+            <div class="slot-label">${TYPE_LABEL[type]}</div>
+            <div class="slot-name" style="color:var(--dim);">未装備</div>
+            <div class="slot-sub">タップで選択</div>
+          `;
+        }
+        div.addEventListener("click", () => {
+          showScreen("inventory");
+        });
+        container.appendChild(div);
+      });
+    }
+
+    function refreshHome() {
+      refreshCurrencies();
+      renderEquippedSlots($("equipSlotsHome"));
+      const stats = computeStats();
+      $("equip-power").textContent = `POWER ${stats.power}`;
+      const cleared = save.stageStars.filter(s => s > 0).length;
+      const totalStars = save.stageStars.reduce((a, b) => a + b, 0);
+      $("progress-pill").textContent = `STAGE ${save.lastStage} / 5`;
+      $("progress-summary").innerHTML = `
+        <div>クリア済ステージ: <b>${cleared} / 5</b></div>
+        <div>累計スター: <b>★ ${totalStars} / 15</b></div>
+        <div>ベストスコア: <b>${fmt(save.bestScore)}</b></div>
+      `;
+      $("btn-mute").textContent = save.settings.mute ? "🔇 OFF" : "🔊 ON";
+      $("btn-vib").textContent = save.settings.vibrate ? "📳 ON" : "📵 OFF";
+      $("sensSlider").value = save.settings.sens;
+      $("sensVal").textContent = `${Number(save.settings.sens).toFixed(2)}x`;
+      $("deadSlider").value = save.settings.dead;
+      $("deadVal").textContent = Number(save.settings.dead).toFixed(2);
+    }
+
+    /* ============================================================
+       UI: Stages
+       ============================================================ */
+    function refreshStageList() {
+      refreshCurrencies();
+      const list = $("stageList");
+      list.innerHTML = "";
+      STAGES.forEach((stage, i) => {
+        const stars = save.stageStars[i] || 0;
+        const best = save.stageBest[i] || 0;
+        const unlocked = (i + 1) <= save.unlockedStage;
+        const card = document.createElement("div");
+        card.className = "stage-card" + (unlocked ? "" : " locked") + (stars > 0 ? " cleared" : "");
+        const starHtml = "★".repeat(stars) + `<span class="gray">${"★".repeat(3 - stars)}</span>`;
+        const isBoss = stage.bossAt != null;
+        card.innerHTML = `
+          <div class="stage-num">${stage.index}</div>
+          <div class="stage-title">${stage.name} ${isBoss ? "👑" : ""}</div>
+          <div class="stage-meta">
+            <span class="star">${starHtml}</span> ・ Best ${fmt(best)} ・ ${stage.duration}s
+          </div>
+          <div class="stage-rewards">
+            <span>✦ ${stage.rewardCore[0]}–${stage.rewardCore[2]}</span>
+            <span>◆ ${stage.rewardGem[0]}–${stage.rewardGem[2]}</span>
+            <span>★3 報酬: 装備ドロップ</span>
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          if (!unlocked) {
+            showToast(`ステージ${stage.index}はロック中。前のステージをクリアしてください。`);
+            return;
+          }
+          startMission(i);
+        });
+        list.appendChild(card);
+      });
+    }
+
+    /* ============================================================
+       UI: Inventory
+       ============================================================ */
+    let invFilter = "all";
+    function refreshInventory() {
+      refreshCurrencies();
+      renderEquippedSlots($("equipSlotsInv"));
+      const stats = computeStats();
+      $("equip-power-i").textContent = `POWER ${stats.power}`;
+
+      const grid = $("itemGrid");
+      grid.innerHTML = "";
+      const filtered = save.inventory.filter(it => invFilter === "all" || it.type === invFilter);
+      $("invCount").textContent = `${save.inventory.length} 個`;
+      if (filtered.length === 0) {
+        const hint = document.createElement("div");
+        hint.className = "empty-hint";
+        hint.textContent = "アイテムがありません。ガチャで装備を入手しましょう！";
+        grid.appendChild(hint);
+        return;
+      }
+      // Sort: rarity desc, level desc
+      filtered.sort((a, b) => {
+        if (b.rarity !== a.rarity) return b.rarity - a.rarity;
+        if (b.level !== a.level) return b.level - a.level;
+        return a.id - b.id;
+      });
+      filtered.forEach(it => {
+        const equipped = save.equipped[it.type] === it.id;
+        const card = document.createElement("div");
+        card.className = `item-card ${rarityClass(it.rarity)}` + (equipped ? " equipped" : "");
+        card.innerHTML = `
+          <div class="rarity-bar"></div>
+          <div class="ic">${it.icon || "?"}</div>
+          <div class="iname">${it.templateName}</div>
+          <div class="ilvl">${TYPE_LABEL[it.type]} ${RARITY_STARS[it.rarity]} Lv${it.level}</div>
+          ${equipped ? `<div class="ibadge">装備中</div>` : ""}
+        `;
+        card.addEventListener("click", () => openItemModal(it));
+        grid.appendChild(card);
+      });
+    }
+
+    document.querySelectorAll("[data-filter]").forEach(b => {
+      b.addEventListener("click", () => {
+        invFilter = b.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach(x => {
+          x.style.background = x.dataset.filter === invFilter ? "rgba(94,246,255,0.18)" : "rgba(255,255,255,0.08)";
+        });
+        refreshInventory();
+      });
+    });
+
+    /* ============================================================
+       Item modal: equip / upgrade / sell
+       ============================================================ */
+    const itemModal = $("itemModal");
+    const itemModalTitle = $("itemModalTitle");
+    const itemModalBody = $("itemModalBody");
+    $("itemModalClose").addEventListener("click", () => itemModal.classList.add("hidden"));
+    itemModal.addEventListener("click", (e) => {
+      if (e.target === itemModal) itemModal.classList.add("hidden");
+    });
+
+    function statLine(label, value, delta) {
+      return `<div class="stat-row"><div class="lab">${label}</div><div class="val">${value}${delta!=null?` <span class="delta">${delta}</span>`:""}</div></div>`;
+    }
+
+    function describeItemStats(it) {
+      const m = levelMultiplier(it.level);
+      const lines = [];
+      if (it.type === "weapon") {
+        lines.push(statLine("攻撃力", `x${(it.baseDmg * m).toFixed(2)}`));
+        if (it.fireRate) lines.push(statLine("連射速度", `x${it.fireRate.toFixed(2)}`));
+        if (it.multiShot && it.multiShot > 1) lines.push(statLine("同時射撃", `${it.multiShot} 発`));
+        if (it.pierce) lines.push(statLine("貫通", `${it.pierce}`));
+        if (it.splash) lines.push(statLine("スプラッシュ", `あり`));
+      } else if (it.type === "shield") {
+        if (it.hp) lines.push(statLine("最大HP+", `${it.hp}`));
+        if (it.dr) lines.push(statLine("ダメージ軽減", `${(it.dr * m * 100).toFixed(0)}%`));
+        if (it.dodge) lines.push(statLine("回避率", `${(it.dodge * m * 100).toFixed(0)}%`));
+        if (it.revive) lines.push(statLine("復活", `1回`));
+      } else if (it.type === "engine") {
+        lines.push(statLine("速度", `x${(1 + (it.speed - 1) * m).toFixed(2)}`));
+        lines.push(statLine("機動性", `x${(1 + (it.agility - 1) * m).toFixed(2)}`));
+      } else if (it.type === "core") {
+        lines.push(statLine("チャージ速度", `x${(1 + (it.chargeRate - 1) * m).toFixed(2)}`));
+        lines.push(statLine("スコア倍率", `x${(1 + (it.scoreMul - 1) * m).toFixed(2)}`));
+        if (it.lootBonus) lines.push(statLine("報酬+", `x${(1 + (it.lootBonus - 1) * m).toFixed(2)}`));
+        if (it.odLength) lines.push(statLine("OD持続", `x${(1 + (it.odLength - 1) * m).toFixed(2)}`));
+        if (it.slowOnHit) lines.push(statLine("被弾時スロー", `あり`));
+      }
+      return lines.join("");
+    }
+
+    function upgradeCost(it) {
+      // Cost in dust grows with level & rarity
+      return Math.round(20 * Math.pow(1.5, it.level - 1) * (1 + (it.rarity - 1) * 0.4));
+    }
+
+    function sellValue(it) {
+      const base = [4, 12, 30, 90, 220][it.rarity - 1] || 4;
+      return Math.round(base * (1 + (it.level - 1) * 0.5));
+    }
+
+    let currentItemId = null;
+    function openItemModal(it) {
+      currentItemId = it.id;
+      itemModal.classList.remove("hidden");
+      const equipped = save.equipped[it.type] === it.id;
+      const maxLevel = 10;
+      const cost = upgradeCost(it);
+      const sellAmt = sellValue(it);
+      itemModalTitle.innerHTML = `${it.icon} ${it.templateName} <span class="pill">${RARITY_STARS[it.rarity]}</span>`;
+      itemModalBody.innerHTML = `
+        <div style="font-size:0.86rem; color:var(--muted); margin-bottom:8px;">${TYPE_LABEL[it.type]} ・ Lv${it.level} / ${maxLevel} ・ ${RARITY_NAMES[it.rarity]}</div>
+        ${describeItemStats(it)}
+        <div class="btn-row" style="margin-top:14px;">
+          <button id="modalEquipBtn" class="${equipped ? 'secondary' : ''}">${equipped ? '装備中' : '装備する'}</button>
+          <button id="modalUpgradeBtn" class="gold-btn" ${it.level >= maxLevel ? 'disabled' : ''}>強化 (★${cost})</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button id="modalSellBtn" class="danger" ${equipped ? 'disabled' : ''}>分解 (+★${sellAmt})</button>
+        </div>
+      `;
+
+      $("modalEquipBtn").addEventListener("click", () => {
+        if (equipped) return;
+        save.equipped[it.type] = it.id;
+        persist();
+        showToast(`${it.templateName} を装備しました`);
+        openItemModal(it); // refresh
+        refreshInventory();
+      });
+      const upBtn = $("modalUpgradeBtn");
+      if (upBtn) upBtn.addEventListener("click", () => {
+        if (it.level >= maxLevel) { showToast("最大レベルです"); return; }
+        if (save.currencies.dust < cost) { showToast("スターダストが足りません"); return; }
+        save.currencies.dust -= cost;
+        it.level += 1;
+        persist();
+        showToast(`Lv${it.level} に強化！`);
+        haptic(20);
+        openItemModal(it);
+        refreshInventory();
+      });
+      const sellBtn = $("modalSellBtn");
+      if (sellBtn) sellBtn.addEventListener("click", () => {
+        if (equipped) return;
+        const idx = save.inventory.findIndex(x => x.id === it.id);
+        if (idx >= 0) save.inventory.splice(idx, 1);
+        save.currencies.dust += sellAmt;
+        persist();
+        showToast(`分解: +★${sellAmt}`);
+        itemModal.classList.add("hidden");
+        refreshInventory();
+      });
+    }
+
+    /* ============================================================
+       UI: Gacha
+       ============================================================ */
+    function refreshGacha() {
+      refreshCurrencies();
+      $("pity-count").textContent = save.pity;
+      // Disable buttons if not enough
+      $("btn-gacha-core1").disabled = save.currencies.core < 200;
+      $("btn-gacha-core10").disabled = save.currencies.core < 1800;
+      $("btn-gacha-gem1").disabled = save.currencies.gem < 30;
+      $("btn-gacha-gem10").disabled = save.currencies.gem < 270;
+    }
+
+    function performGacha(banner, count) {
+      const costCore = banner === "core" ? (count === 10 ? 1800 : 200) : 0;
+      const costGem = banner === "gem" ? (count === 10 ? 270 : 30) : 0;
+      if (banner === "core" && save.currencies.core < costCore) { showToast("コアが足りません"); return; }
+      if (banner === "gem" && save.currencies.gem < costGem) { showToast("ジェムが足りません"); return; }
+
+      save.currencies.core -= costCore;
+      save.currencies.gem -= costGem;
+
+      const pulled = [];
+      let highestRarity = 1;
+      for (let i = 0; i < count; i++) {
+        let item;
+        if (banner === "gem") {
+          save.pity += 1;
+          if (save.pity >= 90) {
+            // pity: force at least rarity 4
+            item = generateItemOfRarity(Math.random() < 0.85 ? 4 : 5);
+            save.pity = 0;
+          } else {
+            item = rollGacha("gem");
+            if (item.rarity >= 4) save.pity = 0;
+          }
+        } else {
+          item = rollGacha("core");
+        }
+
+        // 10連保証: at least one rarity >= 3 in core 10-pull
+        pulled.push(item);
+        if (item.rarity > highestRarity) highestRarity = item.rarity;
+      }
+
+      // 10連 core保証
+      if (banner === "core" && count === 10 && highestRarity < 3) {
+        // Replace the lowest with a rarity 3
+        const replaceIdx = pulled.findIndex(x => x.rarity === 1) ?? 0;
+        pulled[replaceIdx] = generateItemOfRarity(3);
+        highestRarity = 3;
+      }
+
+      // Add to inventory
+      pulled.forEach(it => save.inventory.push(it));
+      persist();
+      playGachaAnimation(pulled, highestRarity);
+    }
+
+    function playGachaAnimation(pulled, highestRarity) {
+      const stage = $("gachaStage");
+      const orb = $("gachaOrb");
+      stage.classList.remove("hidden");
+      // Adjust orb glow based on highest
+      orb.style.filter = highestRarity >= 4 ? "saturate(1.5) brightness(1.4)" : "";
+      sfx("gachaSpin");
+      haptic([20, 80, 20, 80, 30]);
+
+      setTimeout(() => {
+        stage.classList.add("hidden");
+        showGachaResults(pulled);
+      }, 1700);
+    }
+
+    function showGachaResults(pulled) {
+      const screen = $("gachaResultScreen");
+      const grid = $("gachaPulled");
+      grid.innerHTML = "";
+      let highestR = 1;
+      pulled.forEach(it => {
+        if (it.rarity > highestR) highestR = it.rarity;
+        const card = document.createElement("div");
+        card.className = `item-card ${rarityClass(it.rarity)}`;
+        card.innerHTML = `
+          <div class="rarity-bar"></div>
+          <div class="ic">${it.icon}</div>
+          <div class="iname">${it.templateName}</div>
+          <div class="ilvl">${TYPE_LABEL[it.type]} ${RARITY_STARS[it.rarity]}</div>
+        `;
+        grid.appendChild(card);
+      });
+      $("gachaResultTitle").textContent = highestR >= 5 ? "✨ MYTHIC 出現！ ✨" :
+                                          highestR === 4 ? "🌟 LEGENDARY 確定！" :
+                                          highestR === 3 ? "💎 EPIC 入手" : "召喚結果";
+      screen.classList.remove("hidden");
+      sfx(highestR >= 4 ? "gachaRare" : "gachaCommon");
+      if (highestR >= 4) haptic([30, 60, 30, 60, 80]);
+    }
+    $("gachaResultClose").addEventListener("click", () => {
+      $("gachaResultScreen").classList.add("hidden");
+      refreshInventory();
+      refreshGacha();
+    });
+
+    $("btn-gacha-core1").addEventListener("click", () => { performGacha("core", 1); });
+    $("btn-gacha-core10").addEventListener("click", () => { performGacha("core", 10); });
+    $("btn-gacha-gem1").addEventListener("click", () => { performGacha("gem", 1); });
+    $("btn-gacha-gem10").addEventListener("click", () => { performGacha("gem", 10); });
+
+    $("btn-disassemble").addEventListener("click", () => {
+      // Disassemble all rarity 1-2 not equipped
+      const equippedIds = new Set(Object.values(save.equipped).filter(x => x != null));
+      const remove = save.inventory.filter(it => it.rarity <= 2 && !equippedIds.has(it.id));
+      if (remove.length === 0) { showToast("分解できる装備がありません"); return; }
+      let total = 0;
+      remove.forEach(it => total += sellValue(it));
+      save.inventory = save.inventory.filter(it => !(it.rarity <= 2 && !equippedIds.has(it.id)));
+      save.currencies.dust += total;
+      persist();
+      showToast(`${remove.length}個分解 → +★${total}`);
+      haptic(40);
+      refreshInventory();
+      refreshGacha();
+    });
+
+    /* ============================================================
+       SETTINGS bindings
+       ============================================================ */
+    $("sensSlider").addEventListener("input", (e) => {
+      save.settings.sens = Number(e.target.value);
+      $("sensVal").textContent = `${save.settings.sens.toFixed(2)}x`;
+      persist();
+    });
+    $("deadSlider").addEventListener("input", (e) => {
+      save.settings.dead = Number(e.target.value);
+      $("deadVal").textContent = save.settings.dead.toFixed(2);
+      persist();
+    });
+    $("btn-mute").addEventListener("click", () => {
+      save.settings.mute = !save.settings.mute;
+      persist();
+      $("btn-mute").textContent = save.settings.mute ? "🔇 OFF" : "🔊 ON";
+    });
+    $("btn-vib").addEventListener("click", () => {
+      save.settings.vibrate = !save.settings.vibrate;
+      persist();
+      $("btn-vib").textContent = save.settings.vibrate ? "📳 ON" : "📵 OFF";
+    });
+
+    $("btn-quickplay").addEventListener("click", () => {
+      // Start unlocked stage that has fewest stars (or last)
+      let target = save.unlockedStage - 1;
+      for (let i = 0; i < save.unlockedStage; i++) {
+        if (save.stageStars[i] < 3) { target = i; break; }
+      }
+      startMission(target);
+    });
+    $("btn-continue").addEventListener("click", () => {
+      startMission(save.lastStage - 1);
+    });
+
+    /* ============================================================
+       AUDIO
+       ============================================================ */
+    let audioCtx = null;
+    let masterGain = null;
+    function ensureAudio() {
+      if (audioCtx) return;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audioCtx = new Ctx();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.08;
+      masterGain.connect(audioCtx.destination);
+    }
+    async function unlockAudio() {
+      ensureAudio();
+      if (audioCtx && audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch(e){}
+      }
+    }
+    function tone(freq, dur, type, gain, offset = 0, slide = 1) {
+      if (save.settings.mute || !audioCtx) return;
+      const t = audioCtx.currentTime + offset;
+      const o = audioCtx.createOscillator();
+      const a = audioCtx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(60, freq * slide), t + dur);
+      a.gain.setValueAtTime(0.0001, t);
+      a.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+      a.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(a); a.connect(masterGain);
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+    function sfx(name) {
+      if (!audioCtx) return;
+      switch(name) {
+        case "ring": tone(520, 0.18, "triangle", 0.04, 0, 1.6); tone(820, 0.2, "sine", 0.03, 0.03, 1.2); break;
+        case "hit": tone(140, 0.28, "sawtooth", 0.06, 0, 0.5); break;
+        case "pickup": tone(440, 0.12, "sine", 0.025, 0, 1.25); break;
+        case "overdrive": tone(220, 0.34, "square", 0.05, 0, 2.6); tone(420, 0.28, "triangle", 0.04, 0.04, 2.2); break;
+        case "sector": tone(320, 0.18, "triangle", 0.03, 0, 1.4); tone(480, 0.18, "triangle", 0.025, 0.05, 1.25); break;
+        case "finish": tone(420, 0.24, "triangle", 0.03, 0, 1.5); tone(620, 0.28, "triangle", 0.026, 0.1, 1.45); tone(880, 0.36, "sine", 0.022, 0.16, 1.2); break;
+        case "fail": tone(320, 0.32, "sawtooth", 0.04, 0, 0.45); tone(180, 0.4, "square", 0.04, 0.1, 0.4); break;
+        case "boss": tone(110, 0.5, "sawtooth", 0.06, 0, 0.6); tone(80, 0.6, "square", 0.05, 0.15, 0.5); break;
+        case "shoot": tone(800, 0.05, "square", 0.012, 0, 0.7); break;
+        case "gachaSpin": tone(440, 0.6, "triangle", 0.04, 0, 2.5); tone(220, 0.8, "sine", 0.03, 0.2, 2.2); break;
+        case "gachaCommon": tone(440, 0.18, "sine", 0.04, 0, 1.4); tone(660, 0.22, "triangle", 0.03, 0.06, 1.2); break;
+        case "gachaRare": tone(330, 0.3, "triangle", 0.05, 0, 1.6); tone(550, 0.36, "sine", 0.04, 0.12, 1.5); tone(880, 0.4, "triangle", 0.04, 0.24, 1.4); break;
+      }
+    }
+    function haptic(pattern) {
+      if (!save.settings.vibrate) return;
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    }
+
+    /* ============================================================
+       TOAST
+       ============================================================ */
+    const toastEl = $("toast");
+    function showToast(msg, dur = 2.0) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      clearTimeout(showToast.t);
+      showToast.t = setTimeout(() => toastEl.classList.remove("show"), dur * 1000);
+    }
+
+    /* ============================================================
+       GAME ENGINE
+       ============================================================ */
+    const canvas = $("game");
+    const ctx = canvas.getContext("2d");
+    let W = window.innerWidth, H = window.innerHeight;
+    let dpr = 1;
+    let lastTime = 0;
+    let timeScale = 1;
+    let timeScaleTimer = 0;
+
+    const game = {
+      mode: "gyro",
+      phase: "menu",        // menu | running | paused | result
+      running: false,
+      stageIndex: 0,
+      stage: null,
+      time: 0,
+      score: 0,
+      multiplier: 1,
+      chain: 0,
+      chainTimer: 0,
+      patternTimer: 0,
+      pickupTimer: 0,
+      shake: 0,
+      flash: 0,
+      demoTime: 0,
+      flowAccum: 0,
+      bossActive: false,
+      bossSpawned: false,
+      bossKilled: false,
+      coresGained: 0,
+      ringsHit: 0,
+      maxFlow: 0,
+      sensorWatch: 0
+    };
+
+    const input = {
+      gamma: 0, beta: 0,
+      filteredGamma: 0, filteredBeta: 0,
+      baseGamma: 0, baseBeta: 0,
+      sensorSamples: 0,
+      touchActive: false,
+      touchStartX: 0, touchStartY: 0,
+      touchX: 0, touchY: 0,
+      targetX: 0.5, targetY: 0.78
+    };
+
+    const player = {
+      x: 0, y: 0, vx: 0, vy: 0, r: 18,
+      hp: 4, maxHp: 4, charge: 0, overdrive: 0, invuln: 0,
+      fireTimer: 0, bank: 0, glow: 0, revivedUsed: false
+    };
+
+    let stats = computeStats();
+
+    const bullets = [], hazards = [], rings = [], pickups = [], particles = [], shockwaves = [];
+    let boss = null;
+
+    const stars = Array.from({length: 140}, () => ({
+      x: Math.random(), y: Math.random(),
+      depth: rand(0.25, 1.25),
+      size: rand(0.8, 2.4),
+      twinkle: Math.random() * TAU
+    }));
+
+    function clearEntities() {
+      bullets.length = 0;
+      hazards.length = 0;
+      rings.length = 0;
+      pickups.length = 0;
+      particles.length = 0;
+      shockwaves.length = 0;
+      boss = null;
+    }
+
+    function resize() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!game.running) {
+        player.x = W * 0.5;
+        player.y = H * 0.78;
+      }
+    }
+    window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", () => setTimeout(resize, 200));
+
+    /* ============================================================
+       Motion / Input
+       ============================================================ */
+    async function requestMotionAccess() {
+      if (typeof window.DeviceOrientationEvent === "undefined") return false;
+      if (typeof window.DeviceOrientationEvent.requestPermission === "function") {
+        try {
+          const r = await window.DeviceOrientationEvent.requestPermission();
+          return r === "granted";
+        } catch(e) { return false; }
+      }
+      return true;
+    }
+
+    window.addEventListener("deviceorientation", (e) => {
+      if (typeof e.gamma === "number") input.gamma = e.gamma;
+      if (typeof e.beta === "number") input.beta = e.beta;
+      input.sensorSamples += 1;
+    }, true);
+
+    function calibrateMotion() {
+      input.baseGamma = input.filteredGamma || input.gamma || 0;
+      input.baseBeta = input.filteredBeta || input.beta || 0;
+      showToast("姿勢をリセット");
+      haptic(20);
+    }
+
+    /* Touch (drag-anywhere joystick) */
+    const joy = $("joy"), joyNob = $("joyNob");
+    function showJoy(x, y) {
+      joy.style.left = (x - 55) + "px";
+      joy.style.top = (y - 55) + "px";
+      joy.classList.add("show");
+      joyNob.style.left = "50%";
+      joyNob.style.top = "50%";
+    }
+    function moveJoy(dx, dy) {
+      const max = 38;
+      const len = Math.hypot(dx, dy);
+      const nx = len > max ? dx / len * max : dx;
+      const ny = len > max ? dy / len * max : dy;
+      joyNob.style.left = `calc(50% + ${nx}px)`;
+      joyNob.style.top = `calc(50% + ${ny}px)`;
+    }
+    function hideJoy() { joy.classList.remove("show"); }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      if (game.phase !== "running" && game.phase !== "paused") return;
+      if (game.mode === "touch" || input.sensorSamples === 0) {
+        input.touchActive = true;
+        input.touchStartX = e.clientX;
+        input.touchStartY = e.clientY;
+        input.touchX = e.clientX;
+        input.touchY = e.clientY;
+        showJoy(e.clientX, e.clientY);
+      }
+    }, { passive: true });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!input.touchActive) return;
+      input.touchX = e.clientX;
+      input.touchY = e.clientY;
+      moveJoy(e.clientX - input.touchStartX, e.clientY - input.touchStartY);
+    }, { passive: true });
+    function endTouch() {
+      input.touchActive = false;
+      hideJoy();
+    }
+    canvas.addEventListener("pointerup", endTouch, { passive: true });
+    canvas.addEventListener("pointercancel", endTouch, { passive: true });
+
+    /* ============================================================
+       Game flow
+       ============================================================ */
+    function resetRun() {
+      stats = computeStats();
+      clearEntities();
+      player.maxHp = 4 + (stats.hp - 4); // hp diff
+      // Actually compute: baseHp + bonus from shield (already inside stats.hp)
+      // stats.hp includes baseHp 4
+      player.maxHp = stats.hp;
+      player.hp = player.maxHp;
+      player.x = W * 0.5;
+      player.y = H * 0.78;
+      player.vx = 0; player.vy = 0;
+      player.charge = 0;
+      player.overdrive = 0;
+      player.invuln = 0.5;
+      player.fireTimer = 0;
+      player.bank = 0;
+      player.glow = 0;
+      player.revivedUsed = false;
+
+      game.time = 0;
+      game.score = 0;
+      game.multiplier = 1;
+      game.chain = 0;
+      game.chainTimer = 0;
+      game.patternTimer = 0.6;
+      game.pickupTimer = 1.6;
+      game.shake = 0;
+      game.flash = 0;
+      game.flowAccum = 0;
+      game.bossActive = false;
+      game.bossSpawned = false;
+      game.bossKilled = false;
+      game.coresGained = 0;
+      game.ringsHit = 0;
+      game.maxFlow = 1;
+      game.sensorWatch = game.mode === "gyro" ? 1.4 : 0;
+      timeScale = 1;
+      timeScaleTimer = 0;
+      input.touchActive = false;
+      input.targetX = 0.5;
+      input.targetY = 0.78;
+    }
+
+    async function startMission(stageIndex) {
+      await unlockAudio();
+      const granted = await requestMotionAccess();
+      game.mode = granted ? "gyro" : "touch";
+
+      game.stageIndex = stageIndex;
+      game.stage = STAGES[stageIndex];
+      save.lastStage = stageIndex + 1;
+      persist();
+
+      resetRun();
+      game.phase = "running";
+      game.running = true;
+
+      // Hide screens, show HUD
+      Object.values(screens).forEach(s => s.classList.add("hidden"));
+      $("hud").classList.remove("hidden");
+      $("resultModal").classList.add("hidden");
+      $("bossBar").classList.remove("show");
+      $("bossBanner").classList.remove("show");
+
+      calibrateMotion();
+      updateHud();
+      showToast(`${game.stage.name}`, 2.4);
+      sfx("sector");
+    }
+
+    function returnToHome() {
+      game.phase = "menu";
+      game.running = false;
+      clearEntities();
+      $("hud").classList.add("hidden");
+      $("resultModal").classList.add("hidden");
+      $("bossBar").classList.remove("show");
+      $("bossBanner").classList.remove("show");
+      hideJoy();
+      showScreen("home");
+    }
+
+    function pauseRun() {
+      if (game.phase === "running") {
+        game.phase = "paused";
+        $("pauseBtn").textContent = "RESUME";
+        showToast("一時停止");
+      } else if (game.phase === "paused") {
+        game.phase = "running";
+        $("pauseBtn").textContent = "PAUSE";
+      }
+    }
+
+    /* ============================================================
+       Score / FLOW
+       ============================================================ */
+    function updateMultiplier() {
+      game.multiplier = 1 + Math.min(3.0, Math.floor(game.chain / 3) * 0.3);
+      if (game.multiplier > game.maxFlow) game.maxFlow = game.multiplier;
+    }
+    function addScore(amount) {
+      game.score += Math.round(amount * game.multiplier * stats.scoreMul);
+    }
+    function addChain(amount) {
+      game.chain = clamp(game.chain + amount, 0, 40);
+      game.chainTimer = 3.6;
+      updateMultiplier();
+    }
+    function breakChain() {
+      game.chain = 0; game.chainTimer = 0; updateMultiplier();
+    }
+
+    /* ============================================================
+       Particles / FX
+       ============================================================ */
+    function addParticle(x, y, opt = {}) {
+      particles.push({
+        x, y,
+        vx: opt.vx ?? rand(-80, 80),
+        vy: opt.vy ?? rand(-80, 80),
+        life: opt.life ?? rand(0.3, 0.8),
+        maxLife: opt.life ?? rand(0.3, 0.8),
+        size: opt.size ?? rand(2, 5),
+        color: opt.color ?? "rgba(120, 245, 255, 0.85)"
+      });
+    }
+    function addBurst(x, y, color, count, spread = 1) {
+      for (let i = 0; i < count; i++) {
+        const a = rand(0, TAU), s = rand(45, 200) * spread;
+        addParticle(x, y, { vx: Math.cos(a)*s, vy: Math.sin(a)*s, color, life: rand(0.35, 0.95), size: rand(1.8, 4.2) });
+      }
+    }
+    function addShock(x, y, color = "rgba(132,255,250,0.35)", radius = 18) {
+      shockwaves.push({ x, y, color, radius, life: 0.45, maxLife: 0.45 });
+    }
+
+    /* ============================================================
+       Spawning (hazards / rings / pickups)
+       ============================================================ */
+    function spawnBullet(offX = 0, vx = 0, power = 1) {
+      bullets.push({
+        x: player.x + offX,
+        y: player.y - 16,
+        vx,
+        vy: -680,
+        life: 1.4,
+        power,
+        size: player.overdrive > 0 ? 7 : 5,
+        pierce: stats.pierce,
+        splash: stats.splash
+      });
+    }
+
+    function spawnHazard(type, x, y, opt = {}) {
+      const diff = (game.stage?.difficulty || 1);
+      const base = {
+        type, x, y,
+        vx: opt.vx ?? 0,
+        vy: (opt.vy ?? 240) * diff,
+        r: opt.r ?? 18,
+        hp: (opt.hp ?? 2) * (1 + (diff - 1) * 0.4),
+        worth: opt.worth ?? 80,
+        wobble: rand(0, TAU),
+        amp: opt.amp ?? 0,
+        frequency: opt.frequency ?? rand(1.1, 2.3),
+        nearMissAwarded: false,
+        rotation: rand(0, TAU),
+        spin: opt.spin ?? rand(-2.5, 2.5),
+        safeGap: opt.safeGap ?? 0,
+        bandH: opt.bandH ?? 44,
+        gapCenter: opt.gapCenter ?? x,
+        gapBase: opt.gapBase ?? x,
+        gapAmp: opt.gapAmp ?? 0,
+        gapSpeed: opt.gapSpeed ?? 0,
+        damage: opt.damage ?? 1,
+        seed: rand(0, 999),
+        turn: opt.turn ?? 1
+      };
+      if (type === "mine") {
+        base.r = opt.r ?? 26;
+        base.hp = (opt.hp ?? 5) * (1 + (diff - 1) * 0.4);
+        base.worth = opt.worth ?? 180;
+        base.vy = (opt.vy ?? 170) * diff;
+      } else if (type === "drone") {
+        base.r = opt.r ?? 20;
+        base.hp = (opt.hp ?? 4) * (1 + (diff - 1) * 0.4);
+        base.worth = opt.worth ?? 130;
+        base.vy = (opt.vy ?? 205) * diff;
+      } else if (type === "beam") {
+        base.r = 0;
+        base.hp = 9999;
+        base.worth = 0;
+        base.vy = (opt.vy ?? 205) * diff;
+      }
+      hazards.push(base);
+    }
+
+    function spawnRing(x, y, size = 42) {
+      rings.push({
+        x, y, r: size,
+        vy: rand(165, 225) * (game.stage?.difficulty || 1),
+        pulse: rand(0, TAU),
+        claimed: false,
+        life: 8
+      });
+    }
+
+    function spawnPickup(kind, x, y, opt = {}) {
+      pickups.push({
+        kind, x, y,
+        r: kind === "repair" ? 18 : 12,
+        vy: opt.vy ?? rand(150, 200),
+        vx: opt.vx ?? rand(-18, 18),
+        pulse: rand(0, TAU),
+        life: 9
+      });
+    }
+
+    function chooseLaneX(i, lanes, inset = 0.14) {
+      return W * (inset + (i + 0.5) / lanes * (1 - inset * 2));
+    }
+
+    function patternLane(gap = 1, lanes = 6) {
+      const start = (Math.random() * (lanes - gap)) | 0;
+      for (let l = 0; l < lanes; l++) {
+        if (l >= start && l < start + gap) continue;
+        spawnHazard("shard", chooseLaneX(l, lanes), -rand(40, 120), {
+          vy: rand(240, 320), hp: 2, amp: rand(8, 18), frequency: rand(1.2, 1.8)
+        });
+      }
+    }
+    function patternDoubleLane() {
+      patternLane(1, 7);
+      setTimeout(() => { if (game.phase === "running") patternLane(2, 7); }, 220);
+    }
+    function patternSlalom() {
+      const left = Math.random() < 0.5;
+      for (let i = 0; i < 6; i++) {
+        const dir = (i % 2 === 0) === left ? 0.24 : 0.76;
+        spawnHazard("shard", W * dir, -80 - i * 84, {
+          vy: rand(240, 310), vx: left ? 20 : -20, amp: rand(26, 48), frequency: rand(1.4, 2.2)
+        });
+      }
+    }
+    function patternArc() {
+      const c = rand(0.3, 0.7) * W;
+      for (let i = 0; i < 5; i++) {
+        const off = (i - 2) * 52;
+        spawnHazard("shard", c + off, -120 - Math.abs(off) * 0.2, {
+          vy: rand(280, 355), vx: off * 0.38, amp: rand(8, 22), frequency: rand(1, 1.6)
+        });
+      }
+    }
+    function patternMines() {
+      const n = game.stageIndex >= 2 ? 4 : 3;
+      for (let i = 0; i < n; i++) {
+        const lane = i + (Math.random() * 0.18 - 0.09);
+        const x = W * (0.18 + lane * (0.64 / Math.max(1, n - 1)));
+        spawnHazard("mine", x, -100 - i * 90, {
+          vy: rand(150, 190), hp: 5 + game.stageIndex, amp: rand(18, 38), frequency: rand(0.7, 1.2)
+        });
+      }
+    }
+    function patternBeam(double = false) {
+      const safeGap = W * rand(0.22, 0.32);
+      spawnHazard("beam", W * 0.5, -80, {
+        bandH: game.stageIndex >= 2 ? 48 : 42,
+        safeGap,
+        gapBase: W * rand(0.32, 0.68),
+        gapCenter: W * 0.5,
+        gapAmp: W * rand(0.06, 0.15),
+        gapSpeed: rand(1.4, 2.2),
+        vy: rand(190, 230)
+      });
+      if (double) {
+        spawnHazard("beam", W * 0.5, -260, {
+          bandH: 50,
+          safeGap: W * rand(0.2, 0.27),
+          gapBase: W * rand(0.25, 0.75),
+          gapCenter: W * 0.5,
+          gapAmp: W * rand(0.09, 0.18),
+          gapSpeed: rand(1.9, 2.7),
+          vy: rand(205, 245)
+        });
+      }
+    }
+    function patternDroneV() {
+      const c = rand(0.32, 0.68) * W;
+      const sp = rand(42, 58);
+      for (let i = 0; i < 5; i++) {
+        const side = i - 2;
+        spawnHazard("drone", c + side * sp, -100 - Math.abs(side) * 44, {
+          vy: rand(200, 235), vx: side * 10, hp: 4 + (game.stageIndex >= 3 ? 1 : 0)
+        });
+      }
+      spawnPickup("core", c, -360, { vy: 190 });
+    }
+    function patternRings() {
+      const base = rand(0.26, 0.74), dir = Math.random() < 0.5 ? -1 : 1;
+      for (let i = 0; i < 4; i++) {
+        const wave = base + dir * (i * 0.08) + Math.sin(i * 1.1) * 0.07;
+        spawnRing(clamp(wave, 0.18, 0.82) * W, -80 - i * 150, 42);
+      }
+      if (Math.random() < 0.65) {
+        spawnHazard("shard", clamp(base + dir * 0.2, 0.16, 0.84) * W, -290, {
+          vy: rand(255, 315), hp: 3
+        });
+      }
+    }
+    function patternEyeSpiral() {
+      const c = W * 0.5;
+      for (let i = 0; i < 7; i++) {
+        const off = (i - 3) * 58;
+        spawnHazard("shard", c + off, -110 - i * 48, {
+          vy: rand(290, 360), vx: -off * 0.22, amp: 44, frequency: 2.2
+        });
+      }
+      spawnRing(c, -480, 50);
+    }
+
+    function spawnPattern() {
+      if (game.bossActive) return;
+      const stage = game.stage;
+      const name = pick(stage.patterns);
+      if (name === "lane") patternLane(game.stageIndex >= 2 ? 2 : 1, game.stageIndex >= 2 ? 7 : 6);
+      else if (name === "doubleLane") patternDoubleLane();
+      else if (name === "slalom") patternSlalom();
+      else if (name === "rings") patternRings();
+      else if (name === "arc") patternArc();
+      else if (name === "mines") patternMines();
+      else if (name === "beam") patternBeam(false);
+      else if (name === "doubleBeam") patternBeam(true);
+      else if (name === "droneV") patternDroneV();
+      else if (name === "eyeSpiral") patternEyeSpiral();
+      const cd = stage.cooldown;
+      game.patternTimer = rand(cd[0], cd[1]);
+    }
+
+    function spawnAmbientPickup() {
+      if (Math.random() < 0.65) {
+        spawnPickup("core", W * rand(0.2, 0.8), -50, { vy: rand(140, 185) });
+      } else if (player.hp < player.maxHp && Math.random() < 0.34) {
+        spawnPickup("repair", W * rand(0.28, 0.72), -60, { vy: 165 });
+      } else {
+        spawnPickup("core", W * rand(0.2, 0.8), -50, { vy: rand(140, 185) });
+      }
+      game.pickupTimer = rand(1.6, 2.6);
+    }
+
+    /* ============================================================
+       BOSS
+       ============================================================ */
+    function spawnBoss() {
+      // Clear small hazards
+      hazards.length = 0;
+      const stage = game.stage;
+      $("bossBanner").classList.add("show");
+      sfx("boss");
+      haptic([60, 80, 60, 80, 100]);
+      setTimeout(() => $("bossBanner").classList.remove("show"), 1500);
+
+      boss = {
+        x: W * 0.5,
+        y: -120,
+        targetY: H * 0.22,
+        r: 60,
+        hp: 240 * stage.difficulty,
+        maxHp: 240 * stage.difficulty,
+        phase: 0,
+        attackTimer: 1.2,
+        wobble: 0,
+        name: "AETHER OVERLORD",
+        damaged: 0,
+        spinT: 0
+      };
+      $("bossBar").classList.add("show");
+      $("bossName").textContent = boss.name;
+      game.bossActive = true;
+    }
+
+    function updateBoss(dt) {
+      if (!boss) return;
+      boss.spinT += dt * 0.6;
+      // Approach
+      if (boss.y < boss.targetY) {
+        boss.y += 60 * dt;
+      } else {
+        // sway
+        boss.wobble += dt;
+        boss.x = W * 0.5 + Math.sin(boss.wobble * 0.7) * W * 0.32;
+      }
+      boss.damaged = Math.max(0, boss.damaged - dt * 4);
+
+      // Attacks
+      boss.attackTimer -= dt;
+      if (boss.attackTimer <= 0) {
+        const phase = boss.hp / boss.maxHp;
+        if (phase > 0.66) {
+          // Phase 1: spread shards
+          for (let i = -2; i <= 2; i++) {
+            spawnHazard("shard", boss.x + i * 28, boss.y + boss.r, {
+              vy: 280, vx: i * 80, hp: 2, amp: 10, frequency: 1.5
+            });
+          }
+          boss.attackTimer = 1.6;
+        } else if (phase > 0.33) {
+          // Phase 2: drones + occasional beam
+          for (let i = 0; i < 3; i++) {
+            spawnHazard("drone", boss.x + (i - 1) * 70, boss.y + boss.r + 20, {
+              vy: 200, vx: (i - 1) * 20, hp: 5
+            });
+          }
+          if (Math.random() < 0.5) {
+            spawnHazard("beam", W * 0.5, boss.y + 200, {
+              bandH: 46, safeGap: W * 0.26,
+              gapBase: W * 0.5, gapCenter: W * 0.5, gapAmp: W * 0.18, gapSpeed: 1.8,
+              vy: 200
+            });
+          }
+          boss.attackTimer = 1.45;
+        } else {
+          // Phase 3: chaos
+          for (let i = -3; i <= 3; i++) {
+            spawnHazard("shard", boss.x + i * 32, boss.y + boss.r, {
+              vy: 320, vx: i * 60, hp: 2, amp: 18, frequency: 2.2
+            });
+          }
+          if (Math.random() < 0.6) {
+            spawnHazard("mine", W * rand(0.2, 0.8), boss.y - 30, {
+              vy: 220, hp: 4
+            });
+          }
+          boss.attackTimer = 1.2;
+        }
+      }
+
+      // Bullet vs boss
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        const dx = b.x - boss.x, dy = b.y - boss.y;
+        if (dx * dx + dy * dy < (boss.r + b.size) * (boss.r + b.size)) {
+          boss.hp -= b.power * stats.damage;
+          boss.damaged = 1;
+          addParticle(b.x, b.y, { vx: rand(-60, 60), vy: rand(-60, 60), color: "rgba(255,180,180,0.95)", life: 0.25, size: 2.5 });
+          if (b.pierce > 0) { b.pierce -= 1; }
+          else { bullets.splice(i, 1); }
+        }
+      }
+
+      // Player vs boss
+      const dx = player.x - boss.x, dy = player.y - boss.y;
+      if (dx * dx + dy * dy < (boss.r + player.r) * (boss.r + player.r)) {
+        damagePlayer(1);
+      }
+
+      // Boss bar
+      const pct = clamp(boss.hp / boss.maxHp, 0, 1);
+      $("bossFill").style.width = `${pct * 100}%`;
+      $("bossHp").textContent = `${Math.ceil(pct * 100)}%`;
+
+      if (boss.hp <= 0) {
+        // Boss killed
+        addBurst(boss.x, boss.y, "rgba(255,200,150,0.95)", 80, 1.6);
+        addShock(boss.x, boss.y, "rgba(255,200,150,0.5)", 80);
+        for (let i = 0; i < 4; i++) {
+          spawnPickup("core", boss.x + rand(-80, 80), boss.y, { vy: 140 });
+        }
+        spawnPickup("repair", boss.x, boss.y - 40, { vy: 130 });
+        addScore(5000);
+        game.shake = 30;
+        game.flash = 0.4;
+        sfx("finish");
+        haptic([100, 60, 100, 60, 200]);
+        boss = null;
+        game.bossKilled = true;
+        $("bossBar").classList.remove("show");
+        // Mission ends in 2s
+        setTimeout(() => {
+          if (game.phase === "running") finishRun(true);
+        }, 1800);
+      }
+    }
+
+    /* ============================================================
+       Updates
+       ============================================================ */
+    function damagePlayer(amount = 1) {
+      if (player.invuln > 0 || game.phase !== "running") return;
+      // Dodge?
+      if (Math.random() < stats.dodge) {
+        // dodge!
+        addParticle(player.x, player.y, { color: "rgba(180,255,255,0.9)", life: 0.4, size: 4 });
+        showToast("回避！", 0.6);
+        return;
+      }
+      // Damage reduction
+      const eff = Math.max(0.4, amount * (1 - stats.dr));
+      player.hp -= eff;
+      if (player.hp <= 0 && stats.revive > 0 && !player.revivedUsed) {
+        player.revivedUsed = true;
+        player.hp = Math.ceil(player.maxHp / 2);
+        player.invuln = 2;
+        showToast("✨ REVIVE!", 1.6);
+        sfx("overdrive");
+        haptic([40, 40, 80]);
+        addBurst(player.x, player.y, "rgba(255,200,180,0.95)", 30, 1.4);
+        addShock(player.x, player.y, "rgba(255,180,180,0.4)", 36);
+        return;
+      }
+      player.invuln = 1.25;
+      player.charge = Math.max(0, player.charge - 16);
+      player.overdrive = Math.max(0, player.overdrive - 0.6);
+      player.glow = 1;
+      game.shake = 16;
+      game.flash = 0.18;
+      breakChain();
+
+      // Slow on hit (Chrono core)
+      if (stats.slowOnHit) {
+        timeScale = 0.45;
+        timeScaleTimer = 0.6;
+      }
+      addBurst(player.x, player.y, "rgba(255,130,150,0.9)", 28, 1.2);
+      addShock(player.x, player.y, "rgba(255,102,137,0.4)", 26);
+      sfx("hit");
+      haptic(50);
+      if (player.hp <= 0) finishRun(false);
+    }
+
+    function triggerOverdrive() {
+      const dur = 6 * stats.odLength;
+      player.overdrive = dur;
+      player.charge = 0;
+      player.invuln = Math.max(player.invuln, 0.7);
+      player.glow = 1;
+      addShock(player.x, player.y, "rgba(112,255,234,0.5)", 36);
+      addBurst(player.x, player.y, "rgba(133,255,244,0.92)", 40, 1.4);
+      showToast("⚡ OVERDRIVE!");
+      sfx("overdrive");
+      haptic([18, 24, 18, 24, 24]);
+    }
+
+    function updateInput(dt) {
+      input.filteredGamma = lerp(input.filteredGamma, input.gamma, 1 - Math.pow(0.001, dt));
+      input.filteredBeta = lerp(input.filteredBeta, input.beta, 1 - Math.pow(0.001, dt));
+
+      const sens = save.settings.sens;
+      const dead = save.settings.dead;
+
+      if (game.mode === "gyro" && input.sensorSamples > 0) {
+        const dGamma = (input.filteredGamma - input.baseGamma) / 22;
+        const dBeta = -(input.filteredBeta - input.baseBeta) / 24;
+        const dx = Math.abs(dGamma) < dead ? 0 : dGamma;
+        const dy = Math.abs(dBeta) < dead ? 0 : dBeta;
+        input.targetX = clamp(0.5 + dx * 0.95 * sens, 0.09, 0.91);
+        input.targetY = clamp(0.78 + dy * 0.55 * sens, 0.30, 0.90);
+      } else if (game.mode === "touch" || input.touchActive) {
+        if (input.touchActive) {
+          // Joystick mode: relative
+          const dx = (input.touchX - input.touchStartX) / 100;
+          const dy = (input.touchY - input.touchStartY) / 100;
+          input.targetX = clamp(0.5 + dx * sens, 0.09, 0.91);
+          input.targetY = clamp(0.78 + dy * sens, 0.30, 0.90);
+        }
+      }
+
+      const tx = input.targetX * W;
+      const ty = input.targetY * H;
+      const baseSpring = player.overdrive > 0 ? 22 : 18;
+      const spring = baseSpring * stats.agility;
+      const spd = stats.speed;
+      player.vx += (tx - player.x) * spring * dt;
+      player.vy += (ty - player.y) * spring * dt;
+      player.vx *= Math.pow(0.022, dt);
+      player.vy *= Math.pow(0.022, dt);
+      player.x += player.vx * spd * dt;
+      player.y += player.vy * spd * dt;
+      player.x = clamp(player.x, W * 0.07, W * 0.93);
+      player.y = clamp(player.y, H * 0.28, H * 0.92);
+      player.bank = lerp(player.bank, clamp(player.vx / 380, -1, 1), 0.18);
+    }
+
+    function updateFire(dt) {
+      player.fireTimer -= dt;
+      if (player.fireTimer <= 0) {
+        const baseRate = (player.overdrive > 0 ? 0.082 : 0.14) / stats.fireRate;
+        const ms = stats.multiShot;
+        if (ms === 1) {
+          spawnBullet(0, 0, 1);
+        } else if (ms === 2) {
+          spawnBullet(-9, 0, 1);
+          spawnBullet(9, 0, 1);
+        } else {
+          // 3+ shots
+          spawnBullet(0, 0, 1.2);
+          spawnBullet(-15, -90, 1);
+          spawnBullet(15, 90, 1);
+          if (ms >= 4) spawnBullet(-22, -160, 0.9);
+        }
+        if (player.overdrive > 0) {
+          spawnBullet(-22, -110, 1.1);
+          spawnBullet(22, 110, 1.1);
+        }
+        player.fireTimer = baseRate;
+        if (audioCtx && Math.random() < 0.3) sfx("shoot");
+      }
+    }
+
+    function updateBullets(dt) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.life -= dt;
+        if (b.life <= 0 || b.y < -40) bullets.splice(i, 1);
+      }
+    }
+
+    function updateHazards(dt) {
+      for (let i = hazards.length - 1; i >= 0; i--) {
+        const hz = hazards[i];
+        hz.rotation += hz.spin * dt;
+        if (hz.type === "drone") {
+          const desire = clamp((player.x - hz.x) * 0.9, -110, 110);
+          hz.vx = lerp(hz.vx, desire, dt * 0.9 * hz.turn);
+        } else if (hz.type === "beam") {
+          hz.gapCenter = hz.gapBase + Math.sin(game.time * hz.gapSpeed + hz.seed) * hz.gapAmp;
+        }
+        hz.x += hz.vx * dt;
+        hz.y += hz.vy * dt;
+        if (hz.amp) hz.x += Math.sin(game.time * hz.frequency + hz.wobble) * hz.amp * dt;
+
+        // OD beam damage (passive)
+        if (player.overdrive > 0 && hz.type !== "beam") {
+          const within = Math.abs(hz.x - player.x) < 92 && hz.y < player.y + 40;
+          if (within) {
+            hz.hp -= dt * 5.5 * stats.damage;
+            if (Math.random() < 0.35) {
+              addParticle(hz.x + rand(-4, 4), hz.y + rand(-4, 4), {
+                vx: rand(-30, 30), vy: rand(-40, 40),
+                color: "rgba(140,255,234,0.9)", life: 0.28, size: rand(1.5, 3)
+              });
+            }
+          }
+        }
+
+        if (hz.type === "beam") {
+          const inBand = Math.abs(player.y - hz.y) < (hz.bandH * 0.5 + player.r);
+          const inGap = Math.abs(player.x - hz.gapCenter) < (hz.safeGap * 0.5 - player.r * 0.3);
+          if (inBand && !inGap) damagePlayer(hz.damage);
+        } else {
+          const dx = player.x - hz.x, dy = player.y - hz.y;
+          const dsq = dx * dx + dy * dy;
+          const hitR = player.r + hz.r;
+          if (dsq < hitR * hitR) {
+            damagePlayer(hz.damage);
+            hz.hp = 0;
+          } else if (!hz.nearMissAwarded) {
+            const margin = Math.sqrt(dsq) - hitR;
+            if (margin > 3 && margin < 28 && hz.y > player.y - 40) {
+              hz.nearMissAwarded = true;
+              addChain(1);
+              addScore(45);
+              player.charge = Math.min(100, player.charge + 4 * stats.chargeRate);
+              addParticle(player.x, player.y, {
+                vx: rand(-20, 20), vy: rand(-110, -30),
+                color: "rgba(255,245,170,0.9)", life: 0.45, size: 3
+              });
+            }
+          }
+        }
+
+        if (hz.type !== "beam" && hz.hp <= 0) {
+          addScore(hz.worth);
+          addChain(hz.type === "mine" ? 2 : 1);
+          player.charge = Math.min(100, player.charge + (hz.type === "mine" ? 11 : 6) * stats.chargeRate);
+          maybeDropCore(hz);
+          addShock(hz.x, hz.y, "rgba(111,236,255,0.3)", hz.type === "mine" ? 26 : 18);
+          addBurst(hz.x, hz.y,
+            hz.type === "mine" ? "rgba(255,211,122,0.85)" : "rgba(111,236,255,0.92)",
+            hz.type === "mine" ? 24 : 16,
+            hz.type === "mine" ? 1.2 : 1);
+          if (hz.type === "mine" && stats.splash > 0) {
+            // Splash damage to nearby
+            for (let j = hazards.length - 1; j >= 0; j--) {
+              if (j === i) continue;
+              const o = hazards[j];
+              if (o.type === "beam") continue;
+              const ddx = o.x - hz.x, ddy = o.y - hz.y;
+              if (ddx * ddx + ddy * ddy < 110 * 110) o.hp -= 3;
+            }
+          }
+          hazards.splice(i, 1);
+          continue;
+        }
+        if (hz.y > H + 100 || hz.x < -120 || hz.x > W + 120) hazards.splice(i, 1);
+      }
+    }
+
+    function maybeDropCore(hz) {
+      const baseChance = hz.type === "mine" ? 0.34 : hz.type === "drone" ? 0.30 : 0.16;
+      const chance = baseChance * stats.lootBonus;
+      if (Math.random() < chance) {
+        spawnPickup("core", hz.x, hz.y, { vy: rand(130, 180) });
+      }
+    }
+
+    function updateRings(dt) {
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const r = rings[i];
+        r.y += r.vy * dt;
+        r.life -= dt;
+        r.pulse += dt * 3.2;
+        const dx = player.x - r.x, dy = player.y - r.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (!r.claimed && dist < r.r - player.r * 0.15) {
+          r.claimed = true;
+          addScore(180);
+          addChain(2);
+          player.charge = Math.min(100, player.charge + 18 * stats.chargeRate);
+          game.ringsHit += 1;
+          addShock(r.x, r.y, "rgba(255,228,142,0.32)", r.r * 0.6);
+          addBurst(r.x, r.y, "rgba(255,237,168,0.85)", 22, 1.1);
+          sfx("ring");
+          haptic(15);
+        }
+        if (r.y > H + r.r + 20 || r.life <= 0) rings.splice(i, 1);
+      }
+    }
+
+    function updatePickups(dt) {
+      for (let i = pickups.length - 1; i >= 0; i--) {
+        const p = pickups[i];
+        p.life -= dt;
+        if (player.overdrive > 0) {
+          const ax = player.x - p.x, ay = player.y - p.y;
+          const dist = Math.max(40, Math.hypot(ax, ay));
+          p.vx += (ax / dist) * 220 * dt;
+          p.vy += (ay / dist) * 220 * dt;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        const dx = player.x - p.x, dy = player.y - p.y;
+        if (Math.hypot(dx, dy) < player.r + p.r) {
+          if (p.kind === "repair") {
+            player.hp = Math.min(player.maxHp, player.hp + 1);
+            addScore(280);
+            sfx("pickup");
+            showToast("+1 ハル", 1.0);
+          } else {
+            player.charge = Math.min(100, player.charge + 12 * stats.chargeRate);
+            addScore(85);
+            game.coresGained += 1;
+            sfx("pickup");
+          }
+          addBurst(p.x, p.y,
+            p.kind === "repair" ? "rgba(132,255,198,0.95)" : "rgba(94,246,255,0.95)",
+            12, 0.8);
+          pickups.splice(i, 1);
+          continue;
+        }
+        if (p.y > H + 40 || p.life <= 0) pickups.splice(i, 1);
+      }
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= Math.pow(0.18, dt);
+        p.vy *= Math.pow(0.18, dt);
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const w = shockwaves[i];
+        w.life -= dt;
+        w.radius += 220 * dt;
+        if (w.life <= 0) shockwaves.splice(i, 1);
+      }
+    }
+
+    function handleBulletImpacts() {
+      for (let bi = bullets.length - 1; bi >= 0; bi--) {
+        const b = bullets[bi];
+        let hit = false;
+        for (let hi = hazards.length - 1; hi >= 0; hi--) {
+          const hz = hazards[hi];
+          if (hz.type === "beam") continue;
+          const dx = b.x - hz.x, dy = b.y - hz.y;
+          const r = hz.r + b.size;
+          if (dx * dx + dy * dy < r * r) {
+            hz.hp -= b.power * stats.damage;
+            hit = true;
+            addParticle(b.x, b.y, {
+              vx: rand(-40, 40), vy: rand(-40, 40),
+              color: "rgba(196,252,255,0.95)", life: 0.2, size: rand(1.6, 2.8)
+            });
+            if (hz.type === "mine") hz.vy -= 10;
+            if (b.pierce > 0) { b.pierce -= 1; }
+            else { break; }
+          }
+        }
+        if (hit && b.pierce <= 0) bullets.splice(bi, 1);
+      }
+    }
+
+    /* ============================================================
+       Main update
+       ============================================================ */
+    function updateGame(dt) {
+      // time scale (slow on hit)
+      if (timeScaleTimer > 0) {
+        timeScaleTimer -= dt;
+        if (timeScaleTimer <= 0) timeScale = 1;
+      }
+      const sdt = dt * timeScale;
+
+      game.time += sdt;
+      game.demoTime += dt;
+      game.shake = Math.max(0, game.shake - sdt * 30);
+      game.flash = Math.max(0, game.flash - sdt);
+      player.invuln = Math.max(0, player.invuln - sdt);
+      player.overdrive = Math.max(0, player.overdrive - sdt);
+      player.glow = Math.max(0, player.glow - sdt * 1.7);
+
+      if (game.sensorWatch > 0) {
+        game.sensorWatch -= dt;
+        if (input.sensorSamples > 0) game.sensorWatch = 0;
+        else if (game.sensorWatch <= 0 && game.mode === "gyro") {
+          game.mode = "touch";
+          showToast("ジャイロ未検出: タッチ操作");
+        }
+      }
+
+      if (game.chainTimer > 0) {
+        game.chainTimer -= sdt;
+        if (game.chainTimer <= 0) breakChain();
+      }
+
+      // Boss spawn check
+      if (game.stage.bossAt != null && !game.bossSpawned && game.time >= game.stage.bossAt) {
+        game.bossSpawned = true;
+        spawnBoss();
+      }
+
+      if (!game.bossActive) {
+        game.patternTimer -= sdt;
+        if (game.patternTimer <= 0) spawnPattern();
+        game.pickupTimer -= sdt;
+        if (game.pickupTimer <= 0) spawnAmbientPickup();
+      }
+
+      updateInput(dt);
+      updateFire(sdt);
+      updateBullets(sdt);
+      updateHazards(sdt);
+      updateRings(sdt);
+      updatePickups(sdt);
+      handleBulletImpacts();
+      updateParticles(sdt);
+
+      if (game.bossActive && boss) updateBoss(sdt);
+
+      if (player.charge >= 100 && player.overdrive <= 0) triggerOverdrive();
+
+      // End conditions
+      if (game.stage.bossAt == null && game.time >= game.stage.duration) {
+        finishRun(true);
+      } else if (game.stage.bossAt != null && game.time >= game.stage.duration && !game.bossKilled && !game.bossActive) {
+        // shouldn't happen but safety
+      }
+
+      updateHud();
+    }
+
+    /* ============================================================
+       Result / Rewards
+       ============================================================ */
+    function evaluateStars(score, stage) {
+      let s = 0;
+      if (score >= stage.starThresholds[0]) s = 1;
+      if (score >= stage.starThresholds[1]) s = 2;
+      if (score >= stage.starThresholds[2]) s = 3;
+      return s;
+    }
+    function rankFromStars(s) { return ["F", "C", "B", "A", "S", "SS"][s + 1] || "S"; }
+
+    function finishRun(victory) {
+      game.phase = "result";
+      game.running = false;
+      $("hud").classList.add("hidden");
+      $("bossBar").classList.remove("show");
+      hideJoy();
+
+      const stage = game.stage;
+      const stageIdx = game.stageIndex;
+      let stars = 0;
+      const rewards = [];
+
+      if (victory) {
+        stars = evaluateStars(game.score, stage);
+        if (stars === 0) stars = 1; // clearing always = 1 star min
+        // Save stars (max)
+        save.stageStars[stageIdx] = Math.max(save.stageStars[stageIdx], stars);
+        save.stageBest[stageIdx] = Math.max(save.stageBest[stageIdx], game.score);
+        // Unlock next
+        if (stageIdx + 1 >= save.unlockedStage && stageIdx + 1 < STAGES.length) {
+          save.unlockedStage = stageIdx + 2;
+          rewards.push({ type: "unlock", text: `✨ ステージ${stageIdx + 2} 解放！` });
+        }
+
+        // Currency rewards
+        const coreReward = Math.round(stage.rewardCore[stars - 1] * stats.lootBonus);
+        const gemReward = stage.rewardGem[stars - 1];
+        save.currencies.core += coreReward;
+        save.currencies.gem += gemReward;
+        rewards.push({ type: "core", text: `✦ ${coreReward}` });
+        rewards.push({ type: "gem", text: `◆ ${gemReward}` });
+
+        // Score-based dust
+        const dust = Math.floor(game.score / 200);
+        if (dust > 0) {
+          save.currencies.dust += dust;
+          rewards.push({ type: "dust", text: `★ ${dust}` });
+        }
+
+        // 3-star → drop a guaranteed rarity 3+ item
+        if (stars >= 3) {
+          const drop = generateItemOfRarity(Math.random() < 0.3 ? 4 : 3);
+          save.inventory.push(drop);
+          rewards.push({ type: "item", text: `🎁 ${drop.icon} ${drop.templateName} (${RARITY_STARS[drop.rarity]})` });
+        } else if (stars >= 2 && Math.random() < 0.4) {
+          const drop = generateItemOfRarity(Math.random() < 0.5 ? 3 : 2);
+          save.inventory.push(drop);
+          rewards.push({ type: "item", text: `🎁 ${drop.icon} ${drop.templateName} (${RARITY_STARS[drop.rarity]})` });
+        }
+
+        // Boss bonus
+        if (stage.bossAt != null && game.bossKilled) {
+          save.currencies.gem += 10;
+          rewards.push({ type: "gem", text: `👑 ボス撃破ボーナス: ◆ 10` });
+        }
+      } else {
+        // Failed: minor consolation
+        const consolationCore = Math.floor(game.score / 80);
+        if (consolationCore > 0) {
+          save.currencies.core += consolationCore;
+          rewards.push({ type: "core", text: `✦ ${consolationCore} (慰謝料)` });
+        }
+      }
+
+      if (game.score > save.bestScore) save.bestScore = game.score;
+      persist();
+
+      // Display
+      $("resultModal").classList.remove("hidden");
+      $("resultEyebrow").textContent = victory ? "Mission Clear" : "Mission Failed";
+      $("resultTitle").textContent = victory ? "🎉 Stage Cleared!" : "💥 Hull Broken";
+      $("resultLead").textContent = victory
+        ? `${stage.short} を突破。FLOWを保つほど報酬が増えます。`
+        : "ハル破壊。装備を強化して再挑戦しよう！";
+      $("resultScore").textContent = fmt(game.score);
+      $("resultRank").textContent = victory ? rankFromStars(stars) : "F";
+      $("resultBest").textContent = fmt(save.stageBest[stageIdx]);
+      $("resultStars").innerHTML = victory
+        ? "★".repeat(stars) + `<span style="color:rgba(255,255,255,0.2)">${"★".repeat(3 - stars)}</span>`
+        : '<span style="color:rgba(255,255,255,0.2)">☆☆☆</span>';
+      const rl = $("rewardList");
+      rl.innerHTML = "";
+      if (rewards.length === 0) {
+        rl.innerHTML = `<div class="reward-row" style="color:var(--muted);">報酬なし</div>`;
+      } else {
+        rewards.forEach(r => {
+          const row = document.createElement("div");
+          row.className = "reward-row";
+          row.innerHTML = r.text;
+          rl.appendChild(row);
+        });
+      }
+
+      if (victory) sfx("finish"); else sfx("fail");
+      haptic(victory ? [60, 40, 60, 40, 80] : [200, 100, 200]);
+    }
+
+    $("resultRetryBtn").addEventListener("click", () => {
+      $("resultModal").classList.add("hidden");
+      startMission(game.stageIndex);
+    });
+    $("resultMenuBtn").addEventListener("click", () => {
+      $("resultModal").classList.add("hidden");
+      returnToHome();
+    });
+    $("pauseBtn").addEventListener("click", pauseRun);
+    $("recenterBtn").addEventListener("click", calibrateMotion);
+
+    /* ============================================================
+       HUD updates
+       ============================================================ */
+    function updateHud() {
+      $("scoreText").textContent = fmt(game.score);
+      $("comboText").textContent = game.chain > 0 ? `FLOW x${game.multiplier.toFixed(1)} · ${game.chain}` : "FLOW x1.0";
+      // hp pips
+      const pips = $("hpPips");
+      pips.innerHTML = "";
+      const max = Math.ceil(player.maxHp);
+      const cur = Math.ceil(player.hp);
+      for (let i = 0; i < max; i++) {
+        const d = document.createElement("span");
+        d.className = "pip" + (i < cur ? " on" : "");
+        pips.appendChild(d);
+      }
+      $("modeText").textContent = game.mode === "gyro" ? "GYRO" : "TOUCH";
+      $("sectorText").textContent = game.stage.short;
+      $("timeText").textContent = `${Math.max(0, game.stage.duration - game.time).toFixed(1)}s`;
+      $("chargeText").textContent = player.overdrive > 0 ? `OD ${Math.ceil(player.overdrive * 10) / 10}s` : `${Math.round(player.charge)}%`;
+      $("missionFill").style.width = `${clamp((game.time / game.stage.duration) * 100, 0, 100)}%`;
+      $("chargeFill").style.width = `${player.overdrive > 0 ? 100 : clamp(player.charge, 0, 100)}%`;
+    }
+
+    /* ============================================================
+       Drawing
+       ============================================================ */
+    function blendHex(a, b, t) {
+      const p = (h) => ({ r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16) });
+      const ca = p(a), cb = p(b);
+      return `rgb(${Math.round(lerp(ca.r,cb.r,t))},${Math.round(lerp(ca.g,cb.g,t))},${Math.round(lerp(ca.b,cb.b,t))})`;
+    }
+
+    function getStageColors() {
+      if (game.stage) {
+        return game.stage.colors;
+      }
+      return STAGES[Math.floor(game.demoTime / 6) % STAGES.length].colors;
+    }
+
+    function drawBackground() {
+      const cols = getStageColors();
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, cols[0]);
+      grad.addColorStop(0.55, cols[1]);
+      grad.addColorStop(1, cols[2]);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      const t = game.phase === "running" || game.phase === "paused" ? game.time : game.demoTime * 4;
+
+      // Ribbons
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (let i = 0; i < 3; i++) {
+        const ry = H * (0.14 + i * 0.22);
+        ctx.beginPath();
+        for (let x = -40; x <= W + 40; x += 22) {
+          const wave = Math.sin(t * (0.6 + i * 0.1) + x * 0.012 + i * 0.8) * (22 + i * 12);
+          const lift = Math.cos(t * 0.45 + x * 0.009 + i) * 10;
+          if (x === -40) ctx.moveTo(x, ry + wave + lift);
+          else ctx.lineTo(x, ry + wave + lift);
+        }
+        ctx.lineTo(W + 80, -120);
+        ctx.lineTo(-80, -120);
+        ctx.closePath();
+        ctx.fillStyle = i === 0 ? "rgba(98,255,247,0.06)" : i === 1 ? "rgba(150,161,255,0.08)" : "rgba(255,181,126,0.05)";
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Stars
+      for (const s of stars) {
+        const sx = s.x * W + Math.sin(t * 0.08 + s.twinkle) * 8 * s.depth;
+        const sy = ((s.y * H + t * 90 * s.depth) % (H + 80)) - 40;
+        const a = 0.28 + Math.sin(t * 1.8 + s.twinkle) * 0.18 + s.depth * 0.16;
+        ctx.fillStyle = `rgba(235,252,255,${a.toFixed(3)})`;
+        ctx.fillRect(sx, sy, s.size, s.size);
+      }
+    }
+
+    function drawBullets() {
+      ctx.save();
+      for (const b of bullets) {
+        const grad = ctx.createLinearGradient(b.x, b.y + 16, b.x, b.y - 16);
+        grad.addColorStop(0, "rgba(80,222,255,0)");
+        grad.addColorStop(0.2, "rgba(110,250,255,0.85)");
+        grad.addColorStop(1, "rgba(255,255,255,1)");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = player.overdrive > 0 ? 3.8 : 2.5;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y + 10);
+        ctx.lineTo(b.x, b.y - (player.overdrive > 0 ? 22 : 14));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawHazards() {
+      for (const hz of hazards) {
+        if (hz.type === "beam") {
+          ctx.save();
+          const half = hz.safeGap * 0.5;
+          const left = clamp(hz.gapCenter - half, 0, W);
+          const right = clamp(hz.gapCenter + half, 0, W);
+          const y = hz.y - hz.bandH * 0.5;
+          const bg = ctx.createLinearGradient(0, y, 0, y + hz.bandH);
+          bg.addColorStop(0, "rgba(255,132,165,0.08)");
+          bg.addColorStop(0.5, "rgba(255,111,146,0.55)");
+          bg.addColorStop(1, "rgba(255,132,165,0.08)");
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, y, left, hz.bandH);
+          ctx.fillRect(right, y, W - right, hz.bandH);
+          ctx.strokeStyle = "rgba(255,213,225,0.7)";
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(left, y + 4); ctx.lineTo(left, y + hz.bandH - 4);
+          ctx.moveTo(right, y + 4); ctx.lineTo(right, y + hz.bandH - 4);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+
+        ctx.save();
+        ctx.translate(hz.x, hz.y);
+        ctx.rotate(hz.rotation);
+
+        if (hz.type === "shard") {
+          const g = ctx.createRadialGradient(0, 0, 2, 0, 0, hz.r * 1.8);
+          g.addColorStop(0, "rgba(255,216,125,0.35)");
+          g.addColorStop(1, "rgba(255,216,125,0)");
+          ctx.fillStyle = g;
+          ctx.fillRect(-hz.r * 2, -hz.r * 2, hz.r * 4, hz.r * 4);
+          ctx.beginPath();
+          ctx.moveTo(0, -hz.r);
+          ctx.lineTo(hz.r * 0.78, 0);
+          ctx.lineTo(0, hz.r);
+          ctx.lineTo(-hz.r * 0.78, 0);
+          ctx.closePath();
+          const f = ctx.createLinearGradient(-hz.r, -hz.r, hz.r, hz.r);
+          f.addColorStop(0, "#fff0a8");
+          f.addColorStop(1, "#ff8f72");
+          ctx.fillStyle = f;
+          ctx.fill();
+        } else if (hz.type === "mine") {
+          const pulse = 1 + Math.sin(game.time * 3 + hz.seed) * 0.08;
+          ctx.scale(pulse, pulse);
+          const g = ctx.createRadialGradient(0, 0, 4, 0, 0, hz.r * 1.6);
+          g.addColorStop(0, "rgba(255,230,147,0.25)");
+          g.addColorStop(1, "rgba(255,230,147,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(0, 0, hz.r * 1.7, 0, TAU); ctx.fill();
+          for (let i = 0; i < 8; i++) {
+            const a = (TAU / 8) * i;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a) * (hz.r * 0.8), Math.sin(a) * (hz.r * 0.8));
+            ctx.lineTo(Math.cos(a) * (hz.r * 1.38), Math.sin(a) * (hz.r * 1.38));
+            ctx.strokeStyle = "rgba(255,198,112,0.85)";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
+          ctx.beginPath(); ctx.arc(0, 0, hz.r * 0.86, 0, TAU);
+          const f = ctx.createRadialGradient(-4, -5, 3, 0, 0, hz.r);
+          f.addColorStop(0, "#fff2b2"); f.addColorStop(1, "#ff946a");
+          ctx.fillStyle = f; ctx.fill();
+        } else if (hz.type === "drone") {
+          const g = ctx.createRadialGradient(0, 0, 3, 0, 0, hz.r * 1.8);
+          g.addColorStop(0, "rgba(121,255,241,0.22)"); g.addColorStop(1, "rgba(121,255,241,0)");
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, hz.r * 1.7, 0, TAU); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(0, -hz.r);
+          ctx.lineTo(hz.r * 0.94, hz.r * 0.18);
+          ctx.lineTo(hz.r * 0.34, hz.r * 0.84);
+          ctx.lineTo(-hz.r * 0.34, hz.r * 0.84);
+          ctx.lineTo(-hz.r * 0.94, hz.r * 0.18);
+          ctx.closePath();
+          const f = ctx.createLinearGradient(-hz.r, -hz.r, hz.r, hz.r);
+          f.addColorStop(0, "#8dfff4"); f.addColorStop(1, "#53a9ff");
+          ctx.fillStyle = f; ctx.fill();
+          ctx.fillStyle = "#03111d";
+          ctx.beginPath(); ctx.arc(0, 0, hz.r * 0.26, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawRings() {
+      for (const r of rings) {
+        ctx.save();
+        ctx.translate(r.x, r.y);
+        const pulse = 1 + Math.sin(r.pulse) * 0.04;
+        ctx.scale(pulse, pulse);
+        ctx.strokeStyle = r.claimed ? "rgba(255,232,152,0.22)" : "rgba(255,232,152,0.95)";
+        ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(0, 0, r.r, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = r.claimed ? "rgba(255,249,216,0.15)" : "rgba(255,249,216,0.6)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, 0, r.r + 8, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function drawPickups() {
+      for (const p of pickups) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(game.demoTime * 2 + p.pulse);
+        const c = p.kind === "repair" ? "#8bffbb" : "#71f5ff";
+        ctx.shadowBlur = 18; ctx.shadowColor = c;
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.moveTo(0, -p.r);
+        ctx.lineTo(p.r * 0.72, 0);
+        ctx.lineTo(0, p.r);
+        ctx.lineTo(-p.r * 0.72, 0);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        const a = clamp(p.life / p.maxLife, 0, 1);
+        ctx.fillStyle = p.color.replace(/[\d.]+\)$/u, `${a})`);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * a, 0, TAU);
+        ctx.fill();
+      }
+      for (const w of shockwaves) {
+        const a = clamp(w.life / w.maxLife, 0, 1);
+        ctx.strokeStyle = w.color.replace(/[\d.]+\)$/u, `${0.9 * a})`);
+        ctx.lineWidth = 3 * a;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.radius, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    function drawPlayer() {
+      if (player.overdrive > 0) {
+        const bg = ctx.createLinearGradient(player.x, player.y - 18, player.x, -20);
+        bg.addColorStop(0, "rgba(93,245,255,0)");
+        bg.addColorStop(0.15, "rgba(93,245,255,0.3)");
+        bg.addColorStop(1, "rgba(255,255,255,0.7)");
+        ctx.strokeStyle = bg;
+        ctx.lineWidth = 20;
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y - 20);
+        ctx.lineTo(player.x, -20);
+        ctx.stroke();
+      }
+      if (player.invuln > 0 && Math.floor(player.invuln * 18) % 2 === 0) return;
+
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.rotate(player.bank * 0.55);
+      const gr = player.r * (2.1 + player.glow * 0.8);
+      const g = ctx.createRadialGradient(0, 0, 4, 0, 0, gr);
+      g.addColorStop(0, player.overdrive > 0 ? "rgba(162,255,236,0.35)" : "rgba(94,246,255,0.28)");
+      g.addColorStop(1, "rgba(94,246,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, gr, 0, TAU); ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -26);
+      ctx.lineTo(18, 16);
+      ctx.lineTo(0, 10);
+      ctx.lineTo(-18, 16);
+      ctx.closePath();
+      const hull = ctx.createLinearGradient(-18, -20, 18, 18);
+      hull.addColorStop(0, player.overdrive > 0 ? "#eafff6" : "#f3feff");
+      hull.addColorStop(0.6, player.overdrive > 0 ? "#90ffd7" : "#6ff6ff");
+      hull.addColorStop(1, player.overdrive > 0 ? "#4fe39d" : "#2e7be7");
+      ctx.fillStyle = hull;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(8, 6);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-8, 6);
+      ctx.closePath();
+      ctx.fillStyle = "#042033";
+      ctx.fill();
+
+      ctx.fillStyle = player.overdrive > 0 ? "#b8ffe7" : "#fff59f";
+      ctx.beginPath();
+      ctx.moveTo(-7, 17);
+      ctx.lineTo(0, 28 + Math.sin(game.time * 40) * 2);
+      ctx.lineTo(7, 17);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawBoss() {
+      if (!boss) return;
+      ctx.save();
+      ctx.translate(boss.x, boss.y);
+      ctx.rotate(boss.spinT);
+      const pulse = 1 + Math.sin(boss.spinT * 4) * 0.04;
+      ctx.scale(pulse, pulse);
+      // outer glow
+      const g = ctx.createRadialGradient(0, 0, 10, 0, 0, boss.r * 2.2);
+      g.addColorStop(0, boss.damaged > 0 ? "rgba(255,200,200,0.6)" : "rgba(255,150,200,0.4)");
+      g.addColorStop(1, "rgba(255,100,200,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, boss.r * 2.2, 0, TAU); ctx.fill();
+
+      // body — multi-layer
+      for (let i = 5; i >= 0; i--) {
+        const r = boss.r - i * 6;
+        if (r <= 0) continue;
+        ctx.beginPath();
+        for (let a = 0; a < TAU; a += TAU / 6) {
+          const x = Math.cos(a) * r;
+          const y = Math.sin(a) * r;
+          if (a === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+        const t = i / 5;
+        grd.addColorStop(0, boss.damaged > 0 ? `rgba(${255}, ${200 - i * 25}, ${220 - i * 30}, 1)` : `rgba(${200 - i * 20}, ${100 - i * 15}, ${230 - i * 25}, 1)`);
+        grd.addColorStop(1, `rgba(${60 - i * 10}, ${20}, ${80}, ${1 - t * 0.3})`);
+        ctx.fillStyle = grd;
+        ctx.fill();
+      }
+
+      // eye
+      ctx.fillStyle = "#ffec99";
+      ctx.beginPath(); ctx.arc(0, 0, boss.r * 0.18, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#3b0a30";
+      ctx.beginPath(); ctx.arc(0, 0, boss.r * 0.08, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawTargetReticle() {
+      if (game.mode === "touch" && !input.touchActive) return;
+      const x = input.targetX * W, y = input.targetY * H;
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.strokeStyle = game.mode === "gyro" ? "rgba(136,255,198,0.9)" : "rgba(255,245,173,0.9)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, 22, 0, TAU); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y); ctx.lineTo(x + 8, y);
+      ctx.moveTo(x, y - 8); ctx.lineTo(x, y + 8);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawPauseOverlay() {
+      if (game.phase !== "paused") return;
+      ctx.save();
+      ctx.fillStyle = "rgba(4,9,15,0.5)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#eefeff";
+      ctx.font = '900 32px "Hiragino Sans", "Yu Gothic UI", sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText("PAUSED", W * 0.5, H * 0.47);
+      ctx.font = '500 14px "Hiragino Sans", sans-serif';
+      ctx.fillStyle = "rgba(236,249,255,0.78)";
+      ctx.fillText("RESUMEで再開", W * 0.5, H * 0.51);
+      ctx.restore();
+    }
+
+    function render() {
+      const inMission = game.phase === "running" || game.phase === "paused";
+      ctx.save();
+      if (game.shake > 0) ctx.translate(rand(-game.shake, game.shake), rand(-game.shake, game.shake));
+      drawBackground();
+      if (inMission) {
+        drawRings();
+        drawPickups();
+        drawHazards();
+        drawBoss();
+        drawBullets();
+      }
+      drawParticles();
+      if (inMission) drawTargetReticle();
+      if (inMission || game.phase === "menu") drawPlayer();
+      ctx.restore();
+      if (game.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${game.flash * 0.5})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+      drawPauseOverlay();
+    }
+
+    function updateAttract(dt) {
+      game.demoTime += dt;
+      game.shake = Math.max(0, game.shake - dt * 24);
+      player.x = W * 0.5 + Math.sin(game.demoTime * 1.0) * W * 0.18;
+      player.y = H * 0.78 + Math.cos(game.demoTime * 0.8) * 14;
+      player.bank = Math.sin(game.demoTime * 1.5) * 0.3;
+      player.overdrive = Math.max(0, player.overdrive - dt);
+      updateParticles(dt);
+      if (Math.random() < 0.08) {
+        addParticle(rand(0, W), -10, {
+          vx: rand(-10, 10), vy: rand(60, 140),
+          color: "rgba(145,235,255,0.65)", life: rand(1.6, 2.2), size: rand(1.5, 2.5)
+        });
+      }
+    }
+
+    function loop(t) {
+      const dt = Math.min(0.033, ((t - lastTime) || 16.7) / 1000);
+      lastTime = t;
+      if (game.phase === "running") updateGame(dt);
+      else if (game.phase === "paused") {
+        game.demoTime += dt;
+        updateParticles(dt * 0.25);
+      }
+      else updateAttract(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    /* ============================================================
+       Init
+       ============================================================ */
+    function init() {
+      load();
+      // Give starter weapon if first run
+      if (save.inventory.length === 0) {
+        const starter = makeItem("weapon", ITEM_TEMPLATES.weapon[0]);
+        save.inventory.push(starter);
+        save.equipped.weapon = starter.id;
+      }
+      resize();
+      refreshHome();
+      requestAnimationFrame(loop);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden && game.phase === "running") pauseRun();
+      });
+      // Start showing home
+      showScreen("home");
+      // Show tutorial toast on first run
+      if (!save.tutorialDone) {
+        setTimeout(() => showToast("ようこそ！「クイックプレイ」で始められます。", 3.0), 600);
+        save.tutorialDone = true;
+        persist();
+      }
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>
