@@ -406,6 +406,36 @@ body::before {
 }
 .hud-leaderboard .me { color: var(--primary); }
 
+.hud-goal {
+  position: absolute;
+  top: calc(var(--safe-top) + 50px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.92);
+  padding: 6px 14px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.hud-goal-arrow {
+  display: inline-block;
+  font-size: 20px;
+  color: var(--primary);
+  transform-origin: center;
+  transition: transform 0.12s ease-out;
+}
+.hud-goal-dist {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+  text-align: right;
+}
+
 .hud-pause {
   position: absolute;
   bottom: calc(var(--safe-bottom) + 14px);

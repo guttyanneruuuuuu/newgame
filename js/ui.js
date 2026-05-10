@@ -349,6 +349,21 @@ window.BDR = window.BDR || {};
         if (ratio >= 1) dashBtn.classList.remove('cooling');
         else dashBtn.classList.add('cooling');
       }
+      // Goal arrow / distance
+      if (BDR.game.getGoalInfo) {
+        const gi = BDR.game.getGoalInfo();
+        const arrow = $('hud-goal-arrow');
+        const dist = $('hud-goal-dist');
+        if (arrow && dist) {
+          if (gi.finished) {
+            arrow.style.transform = 'rotate(0deg)';
+            dist.textContent = 'GOAL!';
+          } else {
+            arrow.style.transform = `rotate(${gi.angle}rad)`;
+            dist.textContent = Math.round(gi.distance) + 'm';
+          }
+        }
+      }
       // Apply control input pump
       BDR.controls.update();
 

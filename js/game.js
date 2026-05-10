@@ -608,9 +608,32 @@ BDR.game = (function() {
       for (const p of players) {
         if (p.finished) continue;
         if (p.isCPU) {
-          const inp = BDR.ai.tick(p.bot, maze, cfg.cellSize, p.body, maze.goalCell, dt);
+          const inp = BDR.ai.tick(p.bot, maze, cfg.cellSize, p.body, maze.goalCell, dt, players, p.id);
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
           if (running) tryCPUShoot(p);
+          // CPU dash when ramming and within close range to target
+          if (running && inp.ramming && BDR.items) {
+            const last = lastDashAt[p.id] || 0;
+            if (performance.now() - last > BDR.items.cfg.dashCooldownMs * 1.2) {
+              const target = players.find(pp => pp.id === p.bot.ramTargetId);
+              if (target && !target.finished) {
+                const ddx = target.body.position.x - p.body.position.x;
+                const ddz = target.body.position.z - p.body.position.z;
+                const dd = Math.hypot(ddx, ddz);
+                if (dd < cfg.cellSize * 1.6) {
+                  // Dash toward target
+                  const nrm = dd || 1;
+                  const dx = ddx / nrm, dz = ddz / nrm;
+                  p.body.velocity.x += dx * BDR.items.cfg.dashImpulse * 0.85;
+                  p.body.velocity.z += dz * BDR.items.cfg.dashImpulse * 0.85;
+                  p.body.velocity.y += 1.0;
+                  lastDashAt[p.id] = performance.now();
+                  p.mesh.scale.setScalar(1.2);
+                  setTimeout(() => { try { p.mesh.scale.setScalar(1); } catch(e){} }, 180);
+                }
+              }
+            }
+          }
         } else if (p.isMe) {
           const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
@@ -889,6 +912,21 @@ BDR.game = (function() {
     return { rank: idx + 1, total: r.length };
   }
 
+  // Returns { angle: radians (0=up screen, +x=right), distance: meters }
+  function getGoalInfo() {
+    const me = players.find(pp => pp.isMe);
+    if (!me || !mazeData) return { angle: 0, distance: 0, finished: true };
+    if (me.finished) return { angle: 0, distance: 0, finished: true };
+    const g = mazeData.goalPos;
+    // Camera looks toward -z, so "up screen" = -z. Right of screen = +x.
+    const dx = g.x - me.body.position.x;
+    const dz = g.z - me.body.position.z;
+    // Screen-relative: x = dx, y(up) = -dz. atan2 of (x, y) gives angle CW from up.
+    const angle = Math.atan2(dx, -dz);
+    const distance = Math.hypot(dx, dz);
+    return { angle, distance, finished: false };
+  }
+
   function getElapsed() {
     if (!raceStartedAt) return 0;
     return Date.now() - raceStartedAt;
@@ -913,7 +951,7 @@ BDR.game = (function() {
     cfg, init, setup, startCountdown, startLoop,
     setNetworkInput, applyNetworkSnapshot,
     getRanking, getMyRank, getElapsed, getPlayers: () => players,
-    tryLocalDash, getDashCooldownRatio,
+    tryLocalDash, getDashCooldownRatio, getGoalInfo,
     manualEnd
   };
 })();
