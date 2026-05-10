@@ -263,27 +263,44 @@
 
     button.secondary, .btn.secondary {
       color: var(--text);
-      background: rgba(255, 255, 255, 0.08);
-      box-shadow: none;
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(0, 242, 255, 0.08);
+      box-shadow: 0 4px 12px rgba(0, 242, 255, 0.1);
+      border: 1px solid rgba(0, 242, 255, 0.25);
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    button.secondary:hover, .btn.secondary:hover {
+      background: rgba(0, 242, 255, 0.15);
+      box-shadow: 0 6px 16px rgba(0, 242, 255, 0.15);
     }
 
     button.gem-btn {
       background: linear-gradient(135deg, #f6c4ff, #b35bff 70%);
       color: #fff;
-      box-shadow: 0 10px 28px rgba(179,91,255,0.35);
+      box-shadow: 0 8px 20px rgba(179,91,255,0.3);
+    }
+    button.gem-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 25px rgba(179,91,255,0.4);
     }
 
     button.gold-btn {
       background: linear-gradient(135deg, #fff1ad, #ff9f4a 70%);
-      color: #2a1404;
-      box-shadow: 0 10px 28px rgba(255,159,74,0.35);
+      color: #1a0a00;
+      box-shadow: 0 8px 20px rgba(255,159,74,0.3);
+    }
+    button.gold-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 25px rgba(255,159,74,0.4);
     }
 
     button.danger {
       background: linear-gradient(135deg, #ff7b8c, #ff5b6e 70%);
       color: #fff;
-      box-shadow: 0 10px 28px rgba(255,123,140,0.35);
+      box-shadow: 0 8px 20px rgba(255,123,140,0.3);
+    }
+    button.danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 25px rgba(255,123,140,0.4);
     }
 
     button:disabled, .btn:disabled {
