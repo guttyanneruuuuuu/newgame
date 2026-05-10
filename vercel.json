@@ -1,0 +1,5 @@
+{
+  "buildCommand": "echo 'Static HTML project'",
+  "outputDirectory": ".",
+  "public": true
+}
