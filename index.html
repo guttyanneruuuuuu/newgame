@@ -9,12 +9,24 @@
   <meta name="description" content="6人で遊べる3Dボール転がし迷路レース。ジャイロ操作・オンライン対戦・CPU対戦対応。">
   <title>BALL DASH ROYALE - 3Dボール転がしオンライン対戦</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- Three.js for 3D rendering -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
-  <!-- Cannon-es for physics -->
-  <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
-  <!-- PeerJS for multiplayer -->
+  <!-- PeerJS for multiplayer (UMD) -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Three.js + cannon-es as ES modules via importmap, exposed on window for our IIFE scripts -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import * as CANNON from 'cannon-es';
+    window.THREE = THREE;
+    window.CANNON = CANNON;
+    window.dispatchEvent(new Event('libs-ready'));
+  </script>
 </head>
 <body>
   <!-- Title / Lobby Screen -->
@@ -160,13 +172,25 @@
     </div>
   </div>
 
-  <!-- Scripts (modular) -->
-  <script src="js/utils.js"></script>
-  <script src="js/maze.js"></script>
-  <script src="js/controls.js"></script>
-  <script src="js/network.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/ui.js"></script>
+  <!-- Boot loader: waits for THREE+CANNON to be exposed on window, then loads game scripts in order -->
+  <script>
+    (function(){
+      const scripts = [
+        'js/utils.js','js/maze.js','js/controls.js',
+        'js/network.js','js/ai.js','js/game.js','js/ui.js'
+      ];
+      function loadSeq(i){
+        if (i >= scripts.length) return;
+        const s = document.createElement('script');
+        s.src = scripts[i];
+        s.onload = () => loadSeq(i+1);
+        s.onerror = () => console.error('Failed to load', scripts[i]);
+        document.body.appendChild(s);
+      }
+      function start(){ loadSeq(0); }
+      if (window.THREE && window.CANNON) start();
+      else window.addEventListener('libs-ready', start, { once: true });
+    })();
+  </script>
 </body>
 </html>
