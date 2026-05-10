@@ -708,7 +708,7 @@ BDR.game = (function() {
 
     if (!isHost && lastNetSnap) applySnapshot(lastNetSnap);
 
-    // Goal detection
+    // Goal detection + fall-out respawn safety
     if (running) {
       const goal = mazeData.goalPos;
       for (const p of players) {
@@ -716,7 +716,8 @@ BDR.game = (function() {
         const dx = p.body.position.x - goal.x;
         const dz = p.body.position.z - goal.z;
         const d2 = dx*dx + dz*dz;
-        if (d2 < (cfg.cellSize * 0.32) * (cfg.cellSize * 0.32) && p.body.position.y < cfg.ballRadius + 0.6) {
+        // Only count as finished if NEAR the goal hole (not from falling off the map)
+        if (d2 < (cfg.cellSize * 0.32) * (cfg.cellSize * 0.32) && p.body.position.y < cfg.ballRadius + 0.6 && p.body.position.y > -3) {
           p.finished = true;
           finishedCount++;
           p.place = finishedCount;
@@ -724,6 +725,13 @@ BDR.game = (function() {
           p.mesh.visible = false;
           if (p.label) p.label.visible = false;
           if (p.isMe && BDR.sound) BDR.sound.goal();
+        }
+        // Respawn if fallen off the world
+        if (isHost && p.body.position.y < -10) {
+          const sc = p.startCell || maze.startCells[0];
+          p.body.position.set(sc.x * cfg.cellSize, cfg.ballRadius + 1.5, sc.y * cfg.cellSize);
+          p.body.velocity.set(0, 0, 0);
+          p.body.angularVelocity.set(0, 0, 0);
         }
       }
       if (finishedCount >= players.length) endRace();
