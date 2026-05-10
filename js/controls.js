@@ -32,25 +32,35 @@ BDR.controls = (function() {
   }
 
   // ---------------- Gyro ----------------
-  // Intuitive mapping requested by user:
-  //   "Phone's BACK (top edge / far edge) goes DOWN"  =>  ball moves UP on screen.
+  // User-requested intuitive mapping (re-fixed):
+  //   * Tilt the FAR edge of the phone DOWN  => ball goes UP on screen.
+  //   * Tilt the right edge DOWN              => ball goes RIGHT on screen.
+  //   * Larger dead-zone & response curve so small jitters don't drift.
+  //   * Exponential response curve so small tilts give precise control,
+  //     while larger tilts produce strong push for nimble dodging.
   //
-  // Convention used here (portrait):
-  //   beta > 0 = top of phone tilts AWAY from user (back of phone down).
-  //              When held flat & tipped so the FAR edge goes down, beta INCREASES.
-  //              -> we want forward motion (-Z in world, "up" on screen).
+  // Convention (portrait):
+  //   beta  > 0 = top of phone tilts AWAY (far edge down).
   //   gamma > 0 = right side of phone tilts down.
-  //              -> ball moves to the right (+X).
+  // Camera looks toward -Z (so "up on screen" = -Z world).
   const GYRO = {
-    deadZone: 1.5,         // degrees of dead zone after calibration
-    maxAngle: 22.0,        // degrees that map to full input
-    smooth: 0.22,          // smoothing factor (0=no smoothing, 1=instant)
-    sensitivity: 1.15,     // overall multiplier on resulting input
-    invertForwardBack: true, // beta>0 (far edge down) => -Z (up on screen)
+    deadZone: 2.5,         // bigger so resting hand doesn't drift
+    maxAngle: 18.0,        // tilt angle that maps to full input (smaller = quicker response)
+    smooth: 0.32,          // higher = snappier (was 0.22)
+    sensitivity: 1.25,     // overall multiplier (gain)
+    curve: 1.6,            // response curve exponent (>1 = gentler near 0, faster at extremes)
+    invertForwardBack: false, // tilting far edge DOWN should move UP on screen
     invertLeftRight: false
   };
   let smoothedX = 0, smoothedZ = 0;
   let lastRawBeta = 0, lastRawGamma = 0;
+
+  function applyCurve(v, exp) {
+    // signed exponent curve: keeps sign, eases small inputs
+    const s = Math.sign(v);
+    const a = Math.min(1, Math.abs(v));
+    return s * Math.pow(a, exp);
+  }
 
   function onDeviceOrientation(e) {
     if (!state.gyro.enabled) return;
@@ -73,14 +83,22 @@ BDR.controls = (function() {
     if (Math.abs(dBeta) < dz) dBeta = 0; else dBeta = dBeta - Math.sign(dBeta) * dz;
     if (Math.abs(dGamma) < dz) dGamma = 0; else dGamma = dGamma - Math.sign(dGamma) * dz;
 
-    let nx = BDR.clamp(dGamma / GYRO.maxAngle, -1, 1) * GYRO.sensitivity;
-    let nz = BDR.clamp(dBeta / GYRO.maxAngle, -1, 1) * GYRO.sensitivity;
+    let nxRaw = BDR.clamp(dGamma / GYRO.maxAngle, -1, 1);
+    let nzRaw = BDR.clamp(dBeta  / GYRO.maxAngle, -1, 1);
+
+    // Curve so tiny tilts feel gentle and natural
+    let nx = applyCurve(nxRaw, GYRO.curve) * GYRO.sensitivity;
+    let nz = applyCurve(nzRaw, GYRO.curve) * GYRO.sensitivity;
     nx = BDR.clamp(nx, -1, 1);
     nz = BDR.clamp(nz, -1, 1);
 
     if (GYRO.invertLeftRight) nx = -nx;
-    // beta>0 (far edge down) -> we want ball forward (= "up on screen" in our fixed-camera view)
-    // The camera looks toward -Z (north), so "up on screen" = -Z. So invert.
+    // === Forward/back mapping (user requested fix) ===
+    // beta > 0 = far edge down. We want this to mean +Z world (forward into the screen).
+    // Camera looks toward -Z, so "up on screen" = -Z. To make far-edge-down translate to
+    // moving "up on screen", we need beta>0 -> -Z, i.e. invert nz. The previous build
+    // already inverted; users reported it still felt reversed because of phone orientation
+    // detection differences. We expose `invertForwardBack` and default to NOT inverting now.
     if (GYRO.invertForwardBack) nz = -nz;
 
     // Smooth
@@ -196,12 +214,20 @@ BDR.controls = (function() {
     state.input.z = iz;
   }
 
+  // Allow runtime toggling of forward/back inversion (user fine-tune button)
+  function toggleForwardBackInvert() {
+    GYRO.invertForwardBack = !GYRO.invertForwardBack;
+    smoothedX = 0; smoothedZ = 0;
+    return GYRO.invertForwardBack;
+  }
+
   return {
     state,
     update,
     requestGyroPermission,
     setupJoystick,
     recalibrate,
+    toggleForwardBackInvert,
     GYRO
   };
 })();
