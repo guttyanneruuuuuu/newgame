@@ -2708,21 +2708,34 @@
        Motion / Input
        ============================================================ */
     async function requestMotionAccess() {
-      if (typeof window.DeviceOrientationEvent === "undefined") return false;
+      if (typeof window.DeviceOrientationEvent === "undefined") {
+        console.log("DeviceOrientationEvent is not supported");
+        return false;
+      }
       if (typeof window.DeviceOrientationEvent.requestPermission === "function") {
         try {
           const r = await window.DeviceOrientationEvent.requestPermission();
-          return r === "granted";
-        } catch(e) { return false; }
+          if (r === "granted") {
+            // Re-bind listener just in case
+            window.removeEventListener("deviceorientation", onDeviceOrientation, true);
+            window.addEventListener("deviceorientation", onDeviceOrientation, true);
+            return true;
+          }
+          return false;
+        } catch(e) { 
+          console.error("Permission request failed", e);
+          return false; 
+        }
       }
       return true;
     }
 
-    window.addEventListener("deviceorientation", (e) => {
+    function onDeviceOrientation(e) {
       if (typeof e.gamma === "number") input.gamma = e.gamma;
       if (typeof e.beta === "number") input.beta = e.beta;
       input.sensorSamples += 1;
-    }, true);
+    }
+    window.addEventListener("deviceorientation", onDeviceOrientation, true);
 
     function calibrateMotion() {
       input.baseGamma = input.filteredGamma || input.gamma || 0;
@@ -3742,15 +3755,23 @@
       }
 
       if (game.mode === "gyro" && input.sensorSamples > 0) {
-        const dGamma = (input.filteredGamma - input.baseGamma) / 22;
-        const dBeta = -(input.filteredBeta - input.baseBeta) / 24;
-        let effectiveDead = dead;
-        if (save.settings.preset === "easy" && dead === 0.05) effectiveDead = 0.08;
-        else if (save.settings.preset === "hard" && dead === 0.05) effectiveDead = 0.02;
-        const dx = Math.abs(dGamma) < effectiveDead ? 0 : dGamma;
-        const dy = Math.abs(dBeta) < effectiveDead ? 0 : dBeta;
-        input.targetX = clamp(0.5 + dx * 0.95 * sens, 0.09, 0.91);
-        input.targetY = clamp(0.78 + dy * 0.55 * sens, 0.30, 0.90);
+        // More intuitive mapping: 
+        // Gamma (left/right tilt) -> X
+        // Beta (forward/backward tilt) -> Y
+        // We use a slightly more aggressive scaling for better feel
+        const dGamma = (input.filteredGamma - input.baseGamma);
+        const dBeta = (input.filteredBeta - input.baseBeta);
+        
+        let effectiveDead = dead * 15; // Scale deadzone to degrees
+        if (save.settings.preset === "easy") effectiveDead *= 1.5;
+        else if (save.settings.preset === "hard") effectiveDead *= 0.5;
+
+        const dx = Math.abs(dGamma) < effectiveDead ? 0 : (dGamma - Math.sign(dGamma) * effectiveDead) / 20;
+        const dy = Math.abs(dBeta) < effectiveDead ? 0 : (dBeta - Math.sign(dBeta) * effectiveDead) / 20;
+        
+        // Invert dy because tilting forward (beta decrease) should move ship up
+        input.targetX = clamp(0.5 + dx * 1.2 * sens, 0.05, 0.95);
+        input.targetY = clamp(0.75 - dy * 1.0 * sens, 0.15, 0.95);
       } else if (game.mode === "touch") {
         if (input.touchActive) {
           if (input.touchAbsolute) {
