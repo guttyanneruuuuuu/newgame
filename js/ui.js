@@ -355,14 +355,20 @@ window.BDR = window.BDR || {};
   }
 
   // --- Init ---
-  document.addEventListener('DOMContentLoaded', () => {
+  function init() {
     buildColorPicker();
     bindNameInput();
     bindTitleButtons();
     bindHostButtons();
     bindJoinButtons();
     showScreen('screen-title');
-  });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    // DOM already ready (we are loaded dynamically by the boot loader)
+    init();
+  }
 
 })();
 
