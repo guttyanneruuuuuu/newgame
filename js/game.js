@@ -1,27 +1,39 @@
 /* ============================================================
    game.js - 3D ball-rolling maze game (Three.js + Cannon-es)
+   ============================================================
+   Major fixes (PDCA iteration):
+   - Camera is FIXED orientation (looks toward -Z); never spins.
+   - Name labels are placed in the SCENE (not on ball mesh) so they
+     don't rotate with ball or clip into walls.
+   - Walls fully opaque, depthTest enabled (no see-through).
+   - Bigger 17x17 maze with arenas / hazards / pushers / mud.
+   - Player-vs-player physical collisions with bonus knockback.
+   - Mini-map / radar overlay.
    ============================================================ */
 window.BDR = window.BDR || {};
 
 BDR.game = (function() {
   const cfg = {
     cellSize: 6,
-    mazeW: 13,
-    mazeH: 13,
+    mazeW: 17,
+    mazeH: 17,
     ballRadius: 0.55,
     ballMass: 1.0,
-    moveForce: 5.5,        // tuned for "small" gyro feel
-    maxSpeed: 8.5,
+    moveForce: 9.0,        // higher = more responsive
+    maxSpeed: 10.5,
     airControl: 0.4,
-    cameraDist: 4.5,
-    cameraHeight: 1.8,
-    fov: 75
+    cameraDist: 4.2,
+    cameraHeight: 2.4,
+    cameraLookAhead: 0.0,  // fixed camera; no look-ahead
+    fov: 78,
+    pvpKnockback: 6.5
   };
 
   let renderer, scene, camera;
   let physWorld;
   let mazeMesh, mazeData, maze;
-  let players = [];     // { id, name, color, isCPU, mesh, body, label, finished, finishTime, place, bot? }
+  let players = [];
+  let labelGroup = null;     // shared THREE.Group of label sprites in scene
   let myId = '';
   let isHost = true;
   let running = false;
@@ -31,15 +43,17 @@ BDR.game = (function() {
   let raceStartedAt = 0;
   let finishedCount = 0;
   let onResult = null;
-  let onTick = null;       // host tick (for broadcasting state)
-  let networkInputs = {};  // host: {playerId: input}
-  let lastNetSnap = null;  // client: latest snapshot
+  let onTick = null;
+  let networkInputs = {};
+  let lastNetSnap = null;
   let snapInterp = { from: null, to: null, atFromMs: 0, atToMs: 0 };
   let resetCallback = null;
   let powerups = [];
-  let projectiles = [];     // active projectiles (host only)
-  let lastShotAt = {};      // playerId -> timestamp of last projectile shot
-  let lastDashAt = {};      // playerId -> timestamp of last dash
+  let projectiles = [];
+  let lastShotAt = {};
+  let lastDashAt = {};
+  // Mini-map (2D radar) canvas
+  let miniCanvas = null, miniCtx = null;
 
   function init(container) {
     const canvas = document.getElementById('game-canvas');
@@ -52,24 +66,24 @@ BDR.game = (function() {
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xcef0ff);
-    scene.fog = new THREE.Fog(0xcef0ff, 25, 90);
+    scene.fog = new THREE.Fog(0xcef0ff, 35, 120);
 
-    camera = new THREE.PerspectiveCamera(cfg.fov, window.innerWidth / window.innerHeight, 0.1, 300);
+    camera = new THREE.PerspectiveCamera(cfg.fov, window.innerWidth / window.innerHeight, 0.1, 400);
     camera.position.set(0, 8, 12);
 
     // lights
     const hemi = new THREE.HemisphereLight(0xffffff, 0xb0d4ff, 0.85);
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff1c8, 1.05);
-    sun.position.set(40, 60, 30);
+    sun.position.set(40, 80, 30);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -60;
-    sun.shadow.camera.right = 60;
-    sun.shadow.camera.top = 60;
-    sun.shadow.camera.bottom = -60;
+    sun.shadow.camera.left = -90;
+    sun.shadow.camera.right = 90;
+    sun.shadow.camera.top = 90;
+    sun.shadow.camera.bottom = -90;
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 200;
+    sun.shadow.camera.far = 250;
     scene.add(sun);
     const fill = new THREE.DirectionalLight(0xc7e6ff, 0.35);
     fill.position.set(-30, 40, -20);
@@ -80,6 +94,14 @@ BDR.game = (function() {
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    // Init mini-map
+    miniCanvas = document.getElementById('mini-canvas');
+    if (miniCanvas) {
+      miniCanvas.width = 220;
+      miniCanvas.height = 220;
+      miniCtx = miniCanvas.getContext('2d');
+    }
   }
 
   function buildPhysics() {
@@ -99,11 +121,12 @@ BDR.game = (function() {
     physWorld.addContactMaterial(new CANNON.ContactMaterial(wallMat, ballMat, {
       friction: 0.0, restitution: 0.55
     }));
+    // Ball-ball collisions: less friction, more bounce -> better bumping action
     physWorld.addContactMaterial(new CANNON.ContactMaterial(ballMat, ballMat, {
-      friction: 0.05, restitution: 0.85
+      friction: 0.02, restitution: 0.92
     }));
 
-    // Ground: large flat box
+    // Ground
     const totalW = cfg.mazeW * cfg.cellSize;
     const totalH = cfg.mazeH * cfg.cellSize;
     const groundShape = new CANNON.Box(new CANNON.Vec3(totalW, 0.2, totalH));
@@ -112,7 +135,7 @@ BDR.game = (function() {
     groundBody.position.set(totalW / 2 - cfg.cellSize / 2, -0.2, totalH / 2 - cfg.cellSize / 2);
     physWorld.addBody(groundBody);
 
-    // Walls from mazeData
+    // Walls
     const wallH = mazeData.wallH;
     for (const w of mazeData.wallSpecs) {
       const shape = new CANNON.Box(new CANNON.Vec3(w.sx / 2, wallH / 2, w.sz / 2));
@@ -123,65 +146,71 @@ BDR.game = (function() {
     }
 
     physWorld._mats = { groundMat, ballMat, wallMat };
+  }
 
-    // Goal sensor (we just check distance in JS)
+  function makeNameLabel(name) {
+    // High-resolution label drawn in CSS px units; sprite is in scene (not on ball)
+    const lc = document.createElement('canvas');
+    lc.width = 384; lc.height = 96;
+    const lctx = lc.getContext('2d');
+    lctx.clearRect(0, 0, lc.width, lc.height);
+    lctx.font = 'bold 48px "Hiragino Maru Gothic ProN","Noto Sans JP",sans-serif';
+    lctx.textAlign = 'center';
+    lctx.textBaseline = 'middle';
+    lctx.lineWidth = 10;
+    lctx.strokeStyle = 'rgba(0,0,0,0.65)';
+    lctx.strokeText(name, lc.width/2, lc.height/2);
+    lctx.fillStyle = '#ffffff';
+    lctx.fillText(name, lc.width/2, lc.height/2);
+    const tex = new THREE.CanvasTexture(lc);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      depthTest: true,    // important: respect walls
+      depthWrite: false,
+      transparent: true
+    });
+    const sp = new THREE.Sprite(mat);
+    sp.scale.set(2.6, 0.65, 1);
+    return sp;
   }
 
   function createBall(player, startCell) {
     const geo = new THREE.SphereGeometry(cfg.ballRadius, 32, 24);
     const mat = new THREE.MeshStandardMaterial({
       color: player.color,
-      roughness: 0.35,
-      metalness: 0.15,
-      emissive: BDR.darken(player.color, 0.35),
-      emissiveIntensity: 0.18
+      roughness: 0.32,
+      metalness: 0.10,
+      emissive: BDR.darken(player.color, 0.5),
+      emissiveIntensity: 0.15
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
-    // little face / smile decal as a child
-    const faceCanvas = document.createElement('canvas');
-    faceCanvas.width = faceCanvas.height = 128;
-    const fctx = faceCanvas.getContext('2d');
-    fctx.clearRect(0, 0, 128, 128);
-    fctx.fillStyle = '#000';
-    fctx.beginPath(); fctx.arc(40, 50, 8, 0, Math.PI*2); fctx.fill();
-    fctx.beginPath(); fctx.arc(88, 50, 8, 0, Math.PI*2); fctx.fill();
-    fctx.strokeStyle = '#000'; fctx.lineWidth = 6; fctx.lineCap = 'round';
-    fctx.beginPath(); fctx.arc(64, 78, 16, 0, Math.PI); fctx.stroke();
-    const faceTex = new THREE.CanvasTexture(faceCanvas);
-    faceTex.colorSpace = THREE.SRGBColorSpace;
-    const faceGeo = new THREE.PlaneGeometry(cfg.ballRadius * 1.6, cfg.ballRadius * 1.6);
-    const faceMat = new THREE.MeshBasicMaterial({ map: faceTex, transparent: true, depthWrite: false });
-    const face = new THREE.Mesh(faceGeo, faceMat);
-    face.position.set(0, 0, cfg.ballRadius + 0.001);
-    mesh.add(face);
-
-    // Name label sprite
-    const lc = document.createElement('canvas');
-    lc.width = 256; lc.height = 64;
-    const lctx = lc.getContext('2d');
-    function drawLabel(name) {
-      lctx.clearRect(0, 0, 256, 64);
-      lctx.font = 'bold 36px "Hiragino Maru Gothic ProN","Noto Sans JP",sans-serif';
-      lctx.textAlign = 'center';
-      lctx.textBaseline = 'middle';
-      lctx.lineWidth = 8;
-      lctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      lctx.strokeText(name, 128, 32);
-      lctx.fillStyle = '#fff';
-      lctx.fillText(name, 128, 32);
+    // Pattern decals so rotation is visible (multiple stripes)
+    // Build a checker/stripe texture for the ball
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const ctx2 = cv.getContext('2d');
+    ctx2.fillStyle = player.color;
+    ctx2.fillRect(0, 0, 256, 256);
+    ctx2.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let i = 0; i < 256; i += 64) {
+      ctx2.fillRect(i, 0, 32, 256);
     }
-    drawLabel(player.name || 'Player');
-    const labelTex = new THREE.CanvasTexture(lc);
-    labelTex.colorSpace = THREE.SRGBColorSpace;
-    const labelMat = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, depthWrite: false });
-    const label = new THREE.Sprite(labelMat);
-    label.scale.set(2.5, 0.625, 1);
-    label.position.set(0, cfg.ballRadius + 0.9, 0);
-    mesh.add(label);
-    label.renderOrder = 999;
+    // Tiny face on one pole
+    ctx2.fillStyle = '#000';
+    ctx2.beginPath(); ctx2.arc(96, 96, 9, 0, Math.PI*2); ctx2.fill();
+    ctx2.beginPath(); ctx2.arc(160, 96, 9, 0, Math.PI*2); ctx2.fill();
+    ctx2.strokeStyle = '#000'; ctx2.lineWidth = 6; ctx2.lineCap = 'round';
+    ctx2.beginPath(); ctx2.arc(128, 130, 18, 0, Math.PI); ctx2.stroke();
+
+    const ballTex = new THREE.CanvasTexture(cv);
+    ballTex.colorSpace = THREE.SRGBColorSpace;
+    mat.map = ballTex;
+    mat.needsUpdate = true;
 
     scene.add(mesh);
 
@@ -199,13 +228,16 @@ BDR.game = (function() {
     body.position.set(sx, cfg.ballRadius + 0.5, sz);
     physWorld.addBody(body);
 
+    // Label sprite — added DIRECTLY to scene, follows body in tick().
+    const label = makeNameLabel(player.name || 'Player');
+    scene.add(label);
+
     return { mesh, body, label };
   }
 
   function placePlayers(playerList) {
     players = [];
     const startCells = maze.startCells.slice();
-    // shuffle deterministic-ish but stable order
     for (let i = 0; i < playerList.length; i++) {
       const p = playerList[i];
       const sc = startCells[i % startCells.length];
@@ -223,7 +255,8 @@ BDR.game = (function() {
         startCell: sc,
         bot: p.isCPU ? BDR.ai.makeBot(p, p.skill || 0.7) : null,
         boostUntil: 0,
-        respawnTimer: 0
+        respawnTimer: 0,
+        lastBumpAt: 0
       });
     }
   }
@@ -231,9 +264,8 @@ BDR.game = (function() {
   function spawnPowerups() {
     powerups.forEach(pu => scene.remove(pu.mesh));
     powerups = [];
-    // Place a few boost pads in random open cells
     const tried = new Set();
-    const N = 8;
+    const N = 12; // more pickups in larger map
     for (let i = 0; i < N; i++) {
       let attempts = 0, x, y;
       do {
@@ -254,7 +286,7 @@ BDR.game = (function() {
     }
   }
 
-  // ----- Public API -----
+  // ---------- Public API ----------
   function setup(opts) {
     const { mazeSeed, playerList, selfId, hostFlag } = opts;
     myId = selfId;
@@ -273,11 +305,11 @@ BDR.game = (function() {
     if (players.length) {
       for (const p of players) {
         scene.remove(p.mesh);
+        if (p.label) scene.remove(p.label);
         if (p.body) physWorld.removeBody(p.body);
       }
     }
     players = [];
-    // Clear projectiles
     for (const pj of projectiles) {
       scene.remove(pj.mesh);
       if (pj.trail) scene.remove(pj.trail);
@@ -305,6 +337,12 @@ BDR.game = (function() {
     finishedCount = 0;
     raceStartedAt = 0;
     lastFrame = performance.now();
+
+    // Position camera initially behind local player (fixed orientation looking -Z)
+    const me = players.find(pp => pp.isMe);
+    if (me) {
+      camera.position.set(me.body.position.x, me.body.position.y + cfg.cameraHeight, me.body.position.z + cfg.cameraDist);
+    }
   }
 
   function startCountdown(startAtMs) {
@@ -330,12 +368,13 @@ BDR.game = (function() {
     tick();
   }
 
-  // ----- Per-frame update -----
+  // ---------- Per-frame update ----------
   function applyInputToBody(body, input, dt, isOnGround) {
+    // World-space input. Camera is fixed (looks -Z) so input.x = +x world,
+    // input.z = +z world. Player sees: tilt right -> ball goes right; tilt
+    // far edge down -> ball goes "up screen" = -z.
     const force = isOnGround ? cfg.moveForce : cfg.moveForce * cfg.airControl;
-    // Camera-aligned for local player; world-aligned ok since camera follows roughly
     body.applyForce(new CANNON.Vec3(input.x * force, 0, input.z * force), body.position);
-    // soft cap horizontal speed
     const v = body.velocity;
     const hsp = Math.hypot(v.x, v.z);
     if (hsp > cfg.maxSpeed) {
@@ -349,12 +388,11 @@ BDR.game = (function() {
     return body.position.y < cfg.ballRadius + 0.5;
   }
 
-  // CPU tries to shoot at the nearest opponent within range
   function tryCPUShoot(cpu) {
     if (!BDR.items) return;
     const now = performance.now();
     const last = lastShotAt[cpu.id] || 0;
-    const cooldown = BDR.items.cfg.projCooldownMs * (1.6 - cpu.bot.skill * 0.6); // skilled CPUs fire faster
+    const cooldown = BDR.items.cfg.projCooldownMs * (1.6 - cpu.bot.skill * 0.6);
     if (now - last < cooldown) return;
     const range = BDR.items.cfg.projRangeCells * cfg.cellSize;
     let target = null, bestD = Infinity;
@@ -366,7 +404,6 @@ BDR.game = (function() {
       if (d < range && d < bestD) { bestD = d; target = o; }
     }
     if (!target) return;
-    // Predict target position based on velocity
     const lead = 0.25;
     const px = target.body.position.x + target.body.velocity.x * lead;
     const pz = target.body.position.z + target.body.velocity.z * lead;
@@ -385,7 +422,6 @@ BDR.game = (function() {
     lastShotAt[cpu.id] = now;
   }
 
-  // Local player dash (bumps in current move direction)
   function tryLocalDash() {
     const me = players.find(pp => pp.isMe);
     if (!me || me.finished) return false;
@@ -395,11 +431,9 @@ BDR.game = (function() {
     const inp = BDR.controls.state.input;
     let dx = inp.x, dz = inp.z;
     if (dx*dx + dz*dz < 0.04) {
-      // Use current velocity as direction if input is small
       const v = me.body.velocity;
       const sp = Math.hypot(v.x, v.z);
       if (sp > 0.4) { dx = v.x / sp; dz = v.z / sp; }
-      else if (me._smoothDir) { dx = me._smoothDir.x; dz = me._smoothDir.z; }
       else { dx = 0; dz = -1; }
     } else {
       const d = Math.hypot(dx, dz) || 1;
@@ -410,7 +444,6 @@ BDR.game = (function() {
     me.body.velocity.z += dz * imp;
     me.body.velocity.y += 1.5;
     lastDashAt[me.id] = now;
-    // Visual: brief scale flash
     me.mesh.scale.setScalar(1.25);
     setTimeout(() => { try { me.mesh.scale.setScalar(1); } catch(e){} }, 180);
     return true;
@@ -425,20 +458,150 @@ BDR.game = (function() {
     return Math.min(1, elapsed / BDR.items.cfg.dashCooldownMs);
   }
 
-  function tick(dt) {
-    if (!running && !countdownActive) {
-      // Even before start, allow physics for a little settle
+  // PvP collision boost: when two balls collide hard, add extra knockback so
+  // bumping feels strong. This runs on host only (or solo) for fairness.
+  function applyPvPKnockback(dt) {
+    const r2 = (cfg.ballRadius * 2 + 0.05);
+    const r2sq = r2 * r2;
+    const now = performance.now();
+    for (let i = 0; i < players.length; i++) {
+      const a = players[i];
+      if (a.finished) continue;
+      for (let j = i+1; j < players.length; j++) {
+        const b = players[j];
+        if (b.finished) continue;
+        const dx = a.body.position.x - b.body.position.x;
+        const dz = a.body.position.z - b.body.position.z;
+        const dy = a.body.position.y - b.body.position.y;
+        const d2 = dx*dx + dz*dz + dy*dy;
+        if (d2 < r2sq * 1.05) {
+          // Compute relative speed along separation axis
+          const d = Math.sqrt(d2) || 0.0001;
+          const nx = dx/d, ny = dy/d, nz = dz/d;
+          const rvx = a.body.velocity.x - b.body.velocity.x;
+          const rvy = a.body.velocity.y - b.body.velocity.y;
+          const rvz = a.body.velocity.z - b.body.velocity.z;
+          const approach = rvx*nx + rvy*ny + rvz*nz;
+          // a moving INTO b => approach < 0
+          if (approach < -0.5) {
+            // Stronger bump for the faster mover
+            const aSpd = Math.hypot(a.body.velocity.x, a.body.velocity.z);
+            const bSpd = Math.hypot(b.body.velocity.x, b.body.velocity.z);
+            const power = cfg.pvpKnockback * (1 + Math.min(0.7, Math.max(aSpd, bSpd)/12));
+            // Push them apart along n
+            a.body.velocity.x += nx * power * 0.6;
+            a.body.velocity.z += nz * power * 0.6;
+            a.body.velocity.y += 1.0;
+            b.body.velocity.x -= nx * power * 0.6;
+            b.body.velocity.z -= nz * power * 0.6;
+            b.body.velocity.y += 1.0;
+            a.lastBumpAt = now; b.lastBumpAt = now;
+            // Visual flash
+            if (BDR.items && (now - (a._lastFlash||0)) > 200) {
+              BDR.items.spawnHitFlash(scene,
+                { x: (a.body.position.x+b.body.position.x)/2, y: a.body.position.y+0.3, z: (a.body.position.z+b.body.position.z)/2 },
+                0xffffff);
+              a._lastFlash = now; b._lastFlash = now;
+            }
+          }
+        }
+      }
     }
+  }
 
+  // Hazards: spinners, bouncers, mud, pushers
+  function applyHazards(dt) {
+    const cs = cfg.cellSize;
+    if (!mazeData.hazardMeshes) return;
+    const t = performance.now() * 0.001;
+    for (const hz of mazeData.hazardMeshes) {
+      if (hz.type === 'spinner') {
+        hz.angle += hz.speed * dt;
+        hz.mesh.rotation.y = hz.angle;
+        // Sweep collision: bar covers ~cellSize*0.85 long, 0.45 wide
+        const cx = hz.x * cs, cz = hz.y * cs;
+        const cosA = Math.cos(hz.angle);
+        const sinA = Math.sin(hz.angle);
+        const halfL = cs * 0.42;
+        const halfW = 0.40;
+        for (const p of players) {
+          if (p.finished) continue;
+          // Transform player position into bar local space
+          const lx = (p.body.position.x - cx) * cosA + (p.body.position.z - cz) * sinA;
+          const lz = -(p.body.position.x - cx) * sinA + (p.body.position.z - cz) * cosA;
+          if (Math.abs(lx) < halfL + cfg.ballRadius && Math.abs(lz) < halfW + cfg.ballRadius && p.body.position.y < 1.6) {
+            // Knockback perpendicular to bar (along local z)
+            const dirSign = lz > 0 ? 1 : -1;
+            const wx = -sinA * dirSign;
+            const wz = cosA * dirSign;
+            p.body.velocity.x += wx * 11;
+            p.body.velocity.z += wz * 11;
+            p.body.velocity.y += 2.0;
+          }
+        }
+      } else if (hz.type === 'bounce') {
+        const cx = hz.x * cs, cz = hz.y * cs;
+        // Visual pulse
+        hz.mesh.scale.y = 1 + Math.sin(t * 5) * 0.12;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          if (dx*dx + dz*dz < (cs*0.42)*(cs*0.42) && p.body.position.y < 1.0) {
+            if (performance.now() - (p._lastBouncedAt||0) > 400) {
+              p.body.velocity.y = Math.max(p.body.velocity.y, 11);
+              p._lastBouncedAt = performance.now();
+            }
+          }
+        }
+      } else if (hz.type === 'mud') {
+        const cx = hz.x * cs, cz = hz.y * cs;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          if (dx*dx + dz*dz < (cs*0.42)*(cs*0.42) && p.body.position.y < 1.0) {
+            // Heavy damping for one frame
+            p.body.velocity.x *= 0.88;
+            p.body.velocity.z *= 0.88;
+          }
+        }
+      } else if (hz.type === 'pusher') {
+        const cx = hz.x * cs, cz = hz.y * cs;
+        const dirVecs = [{x:0,z:-1},{x:1,z:0},{x:0,z:1},{x:-1,z:0}];
+        const dv = dirVecs[hz.dir];
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          if (dx*dx + dz*dz < (cs*0.42)*(cs*0.42) && p.body.position.y < 1.0) {
+            p.body.velocity.x += dv.x * 0.9;
+            p.body.velocity.z += dv.z * 0.9;
+          }
+        }
+      }
+    }
+    // Goal flag wave
+    if (mazeData.flag) {
+      mazeData.flag.position.y = 4.4 + Math.sin(t * 2.5) * 0.06;
+      mazeData.flag.rotation.y = Math.sin(t * 1.6) * 0.18;
+    }
+    if (mazeData.pillar) {
+      mazeData.pillar.material.opacity = 0.25 + (Math.sin(t * 2.2) * 0.5 + 0.5) * 0.2;
+    }
+    if (mazeData.ring) {
+      mazeData.ring.material.opacity = 0.6 + (Math.sin(t * 3.2) * 0.5 + 0.5) * 0.3;
+    }
+  }
+
+  function tick(dt) {
     // Inputs per player
     if (isHost) {
-      // CPU inputs
       for (const p of players) {
         if (p.finished) continue;
         if (p.isCPU) {
           const inp = BDR.ai.tick(p.bot, maze, cfg.cellSize, p.body, maze.goalCell, dt);
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
-          // CPUs may shoot projectiles at nearby opponents
           if (running) tryCPUShoot(p);
         } else if (p.isMe) {
           const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
@@ -448,18 +611,22 @@ BDR.game = (function() {
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
         }
       }
-      // Update projectiles
       if (BDR.items) BDR.items.update(scene, physWorld, players, projectiles, dt);
     } else {
-      // Client: only push our local input to network. Visuals come from snapshots.
       const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
       BDR.network.sendInput(inp);
     }
 
-    // Physics step (host runs full sim; client also runs but will be corrected by snapshots)
+    // Apply hazards (host = authoritative; client also applies for visual flow)
+    applyHazards(dt);
+
+    // PvP knockback (host authoritative)
+    if (isHost) applyPvPKnockback(dt);
+
+    // Physics step
     physWorld.step(1/60, dt, 3);
 
-    // Powerup pickups (host authoritative; client also visual)
+    // Powerup pickups
     for (const p of players) {
       if (p.finished) continue;
       const cx = Math.round(p.body.position.x / cfg.cellSize);
@@ -472,44 +639,42 @@ BDR.game = (function() {
           if (dxp*dxp + dzp*dzp < 1.4*1.4) {
             pu.taken = true;
             pu.mesh.visible = false;
-            p.boostUntil = performance.now() + 2200;
+            p.boostUntil = performance.now() + 2400;
           }
         }
       }
       if (p.boostUntil && performance.now() < p.boostUntil) {
-        // Apply gentle forward boost in current motion direction
         const v = p.body.velocity;
         const sp = Math.hypot(v.x, v.z);
         if (sp > 0.4) {
-          p.body.applyForce(new CANNON.Vec3(v.x/sp * 9, 0, v.z/sp * 9), p.body.position);
+          p.body.applyForce(new CANNON.Vec3(v.x/sp * 11, 0, v.z/sp * 11), p.body.position);
         }
       }
     }
 
     // Animate powerup spin
-    const t = performance.now() * 0.003;
+    const tt = performance.now() * 0.003;
     for (const pu of powerups) {
       if (!pu.taken) {
-        pu.mesh.rotation.z = t;
-        pu.mesh.position.y = 0.6 + Math.sin(t * 2) * 0.15;
+        pu.mesh.rotation.z = tt;
+        pu.mesh.position.y = 0.6 + Math.sin(tt * 2) * 0.15;
       }
     }
-    // Animate goal flag wave (simple)
-    // (skipped for perf)
 
-    // Sync visuals from physics
+    // Sync visuals from physics + label position (label lives in scene)
     for (const p of players) {
       if (!p.body) continue;
       p.mesh.position.copy(p.body.position);
       p.mesh.quaternion.copy(p.body.quaternion);
-      // Keep label upright
-      p.label.position.set(0, cfg.ballRadius + 0.9, 0);
+      // Label tracks ball but doesn't inherit rotation
+      if (p.label) {
+        p.label.position.set(p.body.position.x, p.body.position.y + cfg.ballRadius + 0.95, p.body.position.z);
+        // Hide label if finished
+        p.label.visible = !p.finished;
+      }
     }
 
-    // Client snapshot interpolation
-    if (!isHost && lastNetSnap) {
-      applySnapshot(lastNetSnap);
-    }
+    if (!isHost && lastNetSnap) applySnapshot(lastNetSnap);
 
     // Goal detection
     if (running) {
@@ -520,64 +685,103 @@ BDR.game = (function() {
         const dz = p.body.position.z - goal.z;
         const d2 = dx*dx + dz*dz;
         if (d2 < (cfg.cellSize * 0.32) * (cfg.cellSize * 0.32) && p.body.position.y < cfg.ballRadius + 0.6) {
-          // Falls into the hole
           p.finished = true;
           finishedCount++;
           p.place = finishedCount;
           p.finishTime = Date.now() - raceStartedAt;
-          // Sink animation
           p.mesh.visible = false;
+          if (p.label) p.label.visible = false;
         }
       }
-      if (finishedCount >= players.length || (finishedCount >= 1 && Date.now() - (raceStartedAt + (players[0]?.finishTime||0)) > 30000 && finishedCount >= Math.min(3, players.length))) {
-        // End condition: everyone done, or 30s after first finish & at least min players
-        if (finishedCount >= players.length) endRace();
-      }
+      if (finishedCount >= players.length) endRace();
     }
 
-    // Camera follow (local player)
+    // ---- Camera: FIXED orientation, follows local player ----
+    // Camera is positioned BEHIND the player along +Z, looking -Z. No yaw/spin.
     const me = players.find(pp => pp.isMe);
     if (me) {
-      // Direction: derived from velocity if moving, else last camera dir
-      const v = me.body.velocity;
-      const sp = Math.hypot(v.x, v.z);
-      let dir;
-      if (sp > 0.6) {
-        dir = new THREE.Vector3(v.x, 0, v.z).normalize();
-        me._lastDir = dir.clone();
-      } else if (me._lastDir) {
-        dir = me._lastDir;
-      } else {
-        // Initial: face from start toward goal
-        const g = mazeData.goalPos;
-        dir = new THREE.Vector3(g.x - me.body.position.x, 0, g.z - me.body.position.z);
-        if (dir.lengthSq() > 0.001) dir.normalize();
-        else dir = new THREE.Vector3(0, 0, -1);
-        me._lastDir = dir.clone();
-      }
-      // Smooth dir
-      if (!me._smoothDir) me._smoothDir = dir.clone();
-      me._smoothDir.lerp(dir, 0.06).normalize();
-
       const target = new THREE.Vector3(me.body.position.x, me.body.position.y, me.body.position.z);
-      const camPos = new THREE.Vector3(
-        target.x - me._smoothDir.x * cfg.cameraDist,
+      const desired = new THREE.Vector3(
+        target.x,
         target.y + cfg.cameraHeight,
-        target.z - me._smoothDir.z * cfg.cameraDist
+        target.z + cfg.cameraDist
       );
-      camera.position.lerp(camPos, 0.15);
-      const lookAt = new THREE.Vector3(
-        target.x + me._smoothDir.x * 1.5,
-        target.y + 0.4,
-        target.z + me._smoothDir.z * 1.5
-      );
-      camera.lookAt(lookAt);
+      camera.position.lerp(desired, 0.18);
+      camera.lookAt(new THREE.Vector3(target.x, target.y + 0.4, target.z));
     }
+
+    // Mini-map render
+    drawMiniMap();
 
     // Host broadcast snapshot
     if (isHost && onTick) onTick(makeSnapshot());
 
     renderer.render(scene, camera);
+  }
+
+  function drawMiniMap() {
+    if (!miniCtx || !maze) return;
+    const W = miniCanvas.width, H = miniCanvas.height;
+    miniCtx.clearRect(0, 0, W, H);
+    // Background
+    miniCtx.fillStyle = 'rgba(255,255,255,0.0)';
+    miniCtx.fillRect(0, 0, W, H);
+    const totalW = maze.width * cfg.cellSize;
+    const totalH = maze.height * cfg.cellSize;
+    const pad = 6;
+    const sx = (W - pad*2) / totalW;
+    const sz = (H - pad*2) / totalH;
+    const offX = pad - cfg.cellSize/2 * sx;
+    const offZ = pad - cfg.cellSize/2 * sz;
+
+    // Walls (dim lines)
+    miniCtx.strokeStyle = 'rgba(40,60,90,0.55)';
+    miniCtx.lineWidth = 1.2;
+    const cs = cfg.cellSize;
+    for (let y = 0; y < maze.height; y++) {
+      for (let x = 0; x < maze.width; x++) {
+        const c = maze.cells[y][x];
+        const x0 = (x*cs - cs/2) * sx + offX;
+        const y0 = (y*cs - cs/2) * sz + offZ;
+        const x1 = (x*cs + cs/2) * sx + offX;
+        const y1 = (y*cs + cs/2) * sz + offZ;
+        if (c.walls.N) { miniCtx.beginPath(); miniCtx.moveTo(x0,y0); miniCtx.lineTo(x1,y0); miniCtx.stroke(); }
+        if (c.walls.W) { miniCtx.beginPath(); miniCtx.moveTo(x0,y0); miniCtx.lineTo(x0,y1); miniCtx.stroke(); }
+        if (y === maze.height-1 && c.walls.S) { miniCtx.beginPath(); miniCtx.moveTo(x0,y1); miniCtx.lineTo(x1,y1); miniCtx.stroke(); }
+        if (x === maze.width-1 && c.walls.E) { miniCtx.beginPath(); miniCtx.moveTo(x1,y0); miniCtx.lineTo(x1,y1); miniCtx.stroke(); }
+      }
+    }
+    // Goal
+    const gx = maze.goalCell.x*cs * sx + offX;
+    const gy = maze.goalCell.y*cs * sz + offZ;
+    miniCtx.fillStyle = '#ffd166';
+    miniCtx.beginPath();
+    miniCtx.arc(gx, gy, 5.5, 0, Math.PI*2);
+    miniCtx.fill();
+    miniCtx.strokeStyle = '#fff'; miniCtx.lineWidth = 2;
+    miniCtx.stroke();
+
+    // Players
+    for (const p of players) {
+      if (!p.body) continue;
+      const px = p.body.position.x * sx + offX;
+      const py = p.body.position.z * sz + offZ;
+      miniCtx.fillStyle = p.color;
+      miniCtx.beginPath();
+      miniCtx.arc(px, py, p.isMe ? 5.5 : 4.2, 0, Math.PI*2);
+      miniCtx.fill();
+      if (p.isMe) {
+        miniCtx.strokeStyle = '#fff'; miniCtx.lineWidth = 2;
+        miniCtx.stroke();
+      } else {
+        miniCtx.strokeStyle = 'rgba(0,0,0,0.4)'; miniCtx.lineWidth = 1;
+        miniCtx.stroke();
+      }
+      if (p.finished) {
+        miniCtx.fillStyle = 'rgba(255,255,255,0.7)';
+        miniCtx.fillText('✓', px+4, py-4);
+      }
+    }
   }
 
   function makeSnapshot() {
@@ -603,7 +807,6 @@ BDR.game = (function() {
       const p = players.find(pp => pp.id === sp.id);
       if (!p) continue;
       if (p.isMe) {
-        // Apply correction lightly to avoid overriding local feel
         const dx = sp.x - p.body.position.x;
         const dz = sp.z - p.body.position.z;
         const dy = sp.y - p.body.position.y;
@@ -617,7 +820,6 @@ BDR.game = (function() {
           p.body.position.z += dz * 0.18;
         }
       } else {
-        // Snap remote toward target
         p.body.position.x = BDR.lerp(p.body.position.x, sp.x, 0.4);
         p.body.position.y = BDR.lerp(p.body.position.y, sp.y, 0.4);
         p.body.position.z = BDR.lerp(p.body.position.z, sp.z, 0.4);
@@ -628,6 +830,7 @@ BDR.game = (function() {
         p.place = sp.place;
         p.finishTime = sp.finishTime;
         p.mesh.visible = false;
+        if (p.label) p.label.visible = false;
       }
     }
     if (snap.powerups) {
@@ -649,7 +852,6 @@ BDR.game = (function() {
 
   function endRace() {
     running = false;
-    // Append finish for not-yet-finished
     for (const p of players) {
       if (!p.finished) {
         p.finished = true;
@@ -663,7 +865,6 @@ BDR.game = (function() {
   }
 
   function getRanking() {
-    // Sort: finished first by place; rest by distance to goal
     const goal = mazeData ? mazeData.goalPos : new THREE.Vector3();
     const finished = players.filter(p => p.finished).sort((a, b) => a.place - b.place);
     const ongoing = players.filter(p => !p.finished).map(p => ({

@@ -109,10 +109,11 @@
       <h2>あそびかた</h2>
       <ul class="howto-list">
         <li><b>目的:</b> 3D迷路を転がってゴールの穴に最初に落ちた人の勝ち！</li>
-        <li><b>操作:</b> スマホを傾けるとボールが転がる。スマホの<b>奥を下げる</b>と画面の<b>上</b>へ進む。</li>
-        <li><b>PCの方:</b> WASD / 矢印キーで操作。スペースでジャンプ。</li>
-        <li><b>視点:</b> ボールの近くからの三人称視点。壁と通路しか見えないことも。</li>
-        <li><b>妨害:</b> 体当たりで他のボールを弾けるよ。スピードアップアイテムも要チェック。</li>
+        <li><b>ジャイロ:</b> スマホの<b>奥(上端)を下げる</b>と画面の<b>上</b>へ進む。直感どおり！</li>
+        <li><b>PCの方:</b> WASD / 矢印キーで操作。スペースで<b>ダッシュ体当たり</b>。</li>
+        <li><b>視点:</b> 固定方位の三人称視点（カメラは回らない）。</li>
+        <li><b>妨害:</b> 体当たり＆DASHボタンで他のボールを弾けるよ。</li>
+        <li><b>ステージ:</b> 大迷路にスピナー、バネ床、ぬかるみ、押し出しゾーン。</li>
         <li><b>定員:</b> 1部屋6人まで。CPUで埋めて遊ぶこともできるよ。</li>
       </ul>
       <button class="btn btn-primary" id="btn-howto-back">OK</button>
@@ -127,7 +128,9 @@
         <div id="hud-rank" class="hud-rank">1 / 6</div>
         <div id="hud-time" class="hud-time">00:00</div>
       </div>
-      <div class="hud-mini" id="hud-mini"></div>
+      <div class="hud-mini" id="hud-mini">
+        <canvas id="mini-canvas"></canvas>
+      </div>
       <div class="hud-leaderboard" id="hud-leaderboard"></div>
       <button class="hud-pause" id="btn-pause">⏸</button>
     <button class="hud-dash" id="btn-dash" title="ダッシュ体当たり">

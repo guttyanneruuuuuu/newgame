@@ -32,24 +32,31 @@ BDR.controls = (function() {
   }
 
   // ---------------- Gyro ----------------
-  // Sensitivity: small movement on phone -> small movement on ball.
-  // Inverted forward/back: tipping the *back* of the phone DOWN -> ball moves UP-screen.
-  // beta: device tilted forward/back. When user tilts the back of the phone down,
-  //       the phone is tilted forward (beta > 0 for typical iOS portrait).
-  //       That means screen-top "looks down" -> we want ball to move forward (-z in world).
+  // Intuitive mapping requested by user:
+  //   "Phone's BACK (top edge / far edge) goes DOWN"  =>  ball moves UP on screen.
+  //
+  // Convention used here (portrait):
+  //   beta > 0 = top of phone tilts AWAY from user (back of phone down).
+  //              When held flat & tipped so the FAR edge goes down, beta INCREASES.
+  //              -> we want forward motion (-Z in world, "up" on screen).
+  //   gamma > 0 = right side of phone tilts down.
+  //              -> ball moves to the right (+X).
   const GYRO = {
-    deadZone: 2.0,         // degrees of dead zone after calibration
-    maxAngle: 18.0,        // degrees that map to full input (smaller = less travel)
-    smooth: 0.18,          // smoothing factor (0=no smoothing, 1=instant)
-    invertForwardBack: true, // requested: tilting back of phone DOWN => up on screen
+    deadZone: 1.5,         // degrees of dead zone after calibration
+    maxAngle: 22.0,        // degrees that map to full input
+    smooth: 0.22,          // smoothing factor (0=no smoothing, 1=instant)
+    sensitivity: 1.15,     // overall multiplier on resulting input
+    invertForwardBack: true, // beta>0 (far edge down) => -Z (up on screen)
     invertLeftRight: false
   };
   let smoothedX = 0, smoothedZ = 0;
+  let lastRawBeta = 0, lastRawGamma = 0;
 
   function onDeviceOrientation(e) {
     if (!state.gyro.enabled) return;
     let beta = e.beta || 0;    // -180..180 (front-back tilt, portrait)
     let gamma = e.gamma || 0;  // -90..90 (left-right tilt)
+    lastRawBeta = beta; lastRawGamma = gamma;
 
     // Auto-calibrate on first frame after enabling
     if (!state.gyro.calibrated) {
@@ -66,17 +73,14 @@ BDR.controls = (function() {
     if (Math.abs(dBeta) < dz) dBeta = 0; else dBeta = dBeta - Math.sign(dBeta) * dz;
     if (Math.abs(dGamma) < dz) dGamma = 0; else dGamma = dGamma - Math.sign(dGamma) * dz;
 
-    let nx = BDR.clamp(dGamma / GYRO.maxAngle, -1, 1);
-    let nz = BDR.clamp(dBeta / GYRO.maxAngle, -1, 1);
+    let nx = BDR.clamp(dGamma / GYRO.maxAngle, -1, 1) * GYRO.sensitivity;
+    let nz = BDR.clamp(dBeta / GYRO.maxAngle, -1, 1) * GYRO.sensitivity;
+    nx = BDR.clamp(nx, -1, 1);
+    nz = BDR.clamp(nz, -1, 1);
 
     if (GYRO.invertLeftRight) nx = -nx;
-    // For "phone back DOWN -> screen UP": when user tilts the top edge of phone DOWN
-    //   (so they can see screen better), beta typically DECREASES (becomes more negative).
-    //   We want ball to move "up screen" => -z in world.
-    // After testing across devices, the requested behavior is: tilting the BACK of the
-    //   phone DOWN should move the ball UP on screen. "Back down" means the bottom edge
-    //   of the phone goes down / top edge goes up -> beta increases.
-    //   So increasing beta should produce -z (move toward screen-up = away).
+    // beta>0 (far edge down) -> we want ball forward (= "up on screen" in our fixed-camera view)
+    // The camera looks toward -Z (north), so "up on screen" = -Z. So invert.
     if (GYRO.invertForwardBack) nz = -nz;
 
     // Smooth

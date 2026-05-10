@@ -372,12 +372,18 @@ body::before {
   position: absolute;
   top: calc(var(--safe-top) + 50px);
   right: 14px;
-  width: 110px;
-  height: 110px;
-  background: rgba(255,255,255,0.78);
+  width: 130px;
+  height: 130px;
+  background: rgba(255,255,255,0.85);
+  border: 2px solid rgba(255,255,255,0.95);
   border-radius: 14px;
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+.hud-mini canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .hud-leaderboard {
   position: absolute;

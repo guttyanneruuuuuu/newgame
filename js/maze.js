@@ -1,10 +1,10 @@
 /* ============================================================
-   maze.js - procedural 3D maze generator
+   maze.js - procedural 3D maze generator (LARGE + obstacles + hazards)
    Returns: { cells, walls, size, startCells[], goalCell, cellSize }
    ============================================================ */
 window.BDR = window.BDR || {};
 
-BDR.generateMaze = function(seed = Date.now(), width = 13, height = 13) {
+BDR.generateMaze = function(seed = Date.now(), width = 17, height = 17) {
   // RNG seeded for reproducibility
   let s = seed >>> 0;
   const rng = () => {
@@ -54,8 +54,8 @@ BDR.generateMaze = function(seed = Date.now(), width = 13, height = 13) {
     }
   }
 
-  // Add some loops for more interesting paths (knock down ~15% of inner walls)
-  const extraLoops = Math.floor(width * height * 0.18);
+  // Add lots of loops for more interesting paths (knock down ~25% of inner walls)
+  const extraLoops = Math.floor(width * height * 0.28);
   for (let i = 0; i < extraLoops; i++) {
     const x = 1 + Math.floor(rng() * (width - 2));
     const y = 1 + Math.floor(rng() * (height - 2));
@@ -67,12 +67,36 @@ BDR.generateMaze = function(seed = Date.now(), width = 13, height = 13) {
     }
   }
 
+  // Carve a few wide-open arenas (3x3) for big PvP brawls
+  const arenas = [];
+  for (let i = 0; i < 3; i++) {
+    const ax = 2 + Math.floor(rng() * (width - 5));
+    const ay = 2 + Math.floor(rng() * (height - 5));
+    arenas.push({ x: ax, y: ay });
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        const cx = ax + dx, cy = ay + dy;
+        if (cx >= width || cy >= height) continue;
+        if (dx < 2) { cells[cy][cx].walls.E = false; if (cx+1<width) cells[cy][cx+1].walls.W = false; }
+        if (dy < 2) { cells[cy][cx].walls.S = false; if (cy+1<height) cells[cy+1][cx].walls.N = false; }
+      }
+    }
+  }
+
   // Goal is roughly center
   const goalCell = { x: Math.floor(width / 2), y: Math.floor(height / 2) };
+  // Make sure goal cell has at least 2 openings
+  cells[goalCell.y][goalCell.x].walls.N = false;
+  cells[goalCell.y][goalCell.x].walls.S = false;
+  cells[goalCell.y][goalCell.x].walls.E = false;
+  cells[goalCell.y][goalCell.x].walls.W = false;
+  if (goalCell.y > 0) cells[goalCell.y-1][goalCell.x].walls.S = false;
+  if (goalCell.y < height-1) cells[goalCell.y+1][goalCell.x].walls.N = false;
+  if (goalCell.x > 0) cells[goalCell.y][goalCell.x-1].walls.E = false;
+  if (goalCell.x < width-1) cells[goalCell.y][goalCell.x+1].walls.W = false;
 
-  // Start positions: distribute along the outer edge as far from goal as possible
-  const startCells = [];
-  const corners = [
+  // Start positions: distribute as far from goal as possible (corners + edges)
+  const startCells = [
     { x: 0, y: 0 },
     { x: width - 1, y: 0 },
     { x: 0, y: height - 1 },
@@ -80,24 +104,107 @@ BDR.generateMaze = function(seed = Date.now(), width = 13, height = 13) {
     { x: Math.floor(width / 2), y: 0 },
     { x: Math.floor(width / 2), y: height - 1 }
   ];
-  for (const c of corners) startCells.push(c);
 
-  return { cells, width, height, startCells, goalCell };
+  // Hazards/obstacles: rotating bumpers, bouncy pads, sliding walls
+  const hazards = [];
+  const used = new Set();
+  function key(x,y){ return x+','+y; }
+  used.add(key(goalCell.x, goalCell.y));
+  for (const sc of startCells) used.add(key(sc.x, sc.y));
+
+  // Rotating bumpers (spinning walls)
+  for (let i = 0; i < 6; i++) {
+    let tries = 0, x, y;
+    do {
+      x = 2 + Math.floor(rng() * (width - 4));
+      y = 2 + Math.floor(rng() * (height - 4));
+      tries++;
+    } while (used.has(key(x,y)) && tries < 30);
+    used.add(key(x,y));
+    hazards.push({ type: 'spinner', x, y, speed: 1.2 + rng() * 1.5 });
+  }
+  // Bounce pads
+  for (let i = 0; i < 8; i++) {
+    let tries = 0, x, y;
+    do {
+      x = 1 + Math.floor(rng() * (width - 2));
+      y = 1 + Math.floor(rng() * (height - 2));
+      tries++;
+    } while (used.has(key(x,y)) && tries < 30);
+    used.add(key(x,y));
+    hazards.push({ type: 'bounce', x, y });
+  }
+  // Sticky/slow tiles (mud)
+  for (let i = 0; i < 5; i++) {
+    let tries = 0, x, y;
+    do {
+      x = 1 + Math.floor(rng() * (width - 2));
+      y = 1 + Math.floor(rng() * (height - 2));
+      tries++;
+    } while (used.has(key(x,y)) && tries < 30);
+    used.add(key(x,y));
+    hazards.push({ type: 'mud', x, y });
+  }
+  // Pusher (one-way conveyor)
+  for (let i = 0; i < 5; i++) {
+    let tries = 0, x, y;
+    do {
+      x = 1 + Math.floor(rng() * (width - 2));
+      y = 1 + Math.floor(rng() * (height - 2));
+      tries++;
+    } while (used.has(key(x,y)) && tries < 30);
+    used.add(key(x,y));
+    const dir = Math.floor(rng() * 4); // 0=N,1=E,2=S,3=W
+    hazards.push({ type: 'pusher', x, y, dir });
+  }
+
+  return { cells, width, height, startCells, goalCell, hazards, arenas };
 };
 
 BDR.buildMazeMeshes = function(maze, opts = {}) {
   const cellSize = opts.cellSize || 6;
-  const wallH = opts.wallH || 3.2;
-  const wallT = opts.wallT || 0.5;
+  const wallH = opts.wallH || 3.6;
+  const wallT = opts.wallT || 0.6;
   const W = maze.width, H = maze.height;
   const totalW = W * cellSize, totalH = H * cellSize;
 
   const group = new THREE.Group();
 
-  // ---- Floor ----
+  // ---- Floor (checkered for visual reference) ----
+  // Build a single plane with a procedural checker texture.
+  const checkerSize = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = checkerSize;
+  const ctx = cv.getContext('2d');
+  // Soft cream base
+  ctx.fillStyle = '#fbeec1';
+  ctx.fillRect(0, 0, checkerSize, checkerSize);
+  // Light squares
+  ctx.fillStyle = '#ffe9a8';
+  const grid = 8;
+  const ts = checkerSize / grid;
+  for (let yy = 0; yy < grid; yy++) {
+    for (let xx = 0; xx < grid; xx++) {
+      if ((xx + yy) % 2 === 0) {
+        ctx.fillRect(xx * ts, yy * ts, ts, ts);
+      }
+    }
+  }
+  // Subtle border lines
+  ctx.strokeStyle = 'rgba(60,80,120,0.10)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= grid; i++) {
+    ctx.beginPath(); ctx.moveTo(i*ts, 0); ctx.lineTo(i*ts, checkerSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i*ts); ctx.lineTo(checkerSize, i*ts); ctx.stroke();
+  }
+  const floorTex = new THREE.CanvasTexture(cv);
+  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+  floorTex.repeat.set(W * 0.5, H * 0.5);
+  floorTex.colorSpace = THREE.SRGBColorSpace;
+
   const floorGeo = new THREE.PlaneGeometry(totalW + 4, totalH + 4, 1, 1);
   const floorMat = new THREE.MeshStandardMaterial({
-    color: 0xfbeec1,
+    map: floorTex,
     roughness: 0.95,
     metalness: 0.0
   });
@@ -107,14 +214,10 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
   floor.receiveShadow = true;
   group.add(floor);
 
-  // Add a slightly darker ring for visual contrast
-  const ringGeo = new THREE.RingGeometry(0.5, 1, 32);
-
   // ---- Walls (collected for physics) ----
-  const wallSpecs = []; // {x,z,sx,sz, isOuter}
+  const wallSpecs = []; // {cx,cz,sx,sz}
 
   // Outer perimeter
-  // North outer
   wallSpecs.push({ cx: totalW / 2 - cellSize / 2, cz: -cellSize / 2, sx: totalW + wallT, sz: wallT });
   wallSpecs.push({ cx: totalW / 2 - cellSize / 2, cz: totalH - cellSize / 2, sx: totalW + wallT, sz: wallT });
   wallSpecs.push({ cx: -cellSize / 2, cz: totalH / 2 - cellSize / 2, sx: wallT, sz: totalH + wallT });
@@ -136,18 +239,23 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
     }
   }
 
-  // Render walls as instanced-like batched meshes for perf
+  // Render walls (opaque, full depth-tested boxes — no transparency!)
   const wallGeo = new THREE.BoxGeometry(1, 1, 1);
   const wallMat = new THREE.MeshStandardMaterial({
     color: 0x9ad6ff,
     roughness: 0.55,
-    metalness: 0.0
+    metalness: 0.0,
+    transparent: false,
+    depthWrite: true,
+    depthTest: true
   });
   const wallTopMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.4
+    roughness: 0.4,
+    transparent: false,
+    depthWrite: true,
+    depthTest: true
   });
-  const meshes = [];
   for (const w of wallSpecs) {
     const m = new THREE.Mesh(wallGeo, wallMat);
     m.scale.set(w.sx, wallH, w.sz);
@@ -155,9 +263,8 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
-    meshes.push(m);
 
-    // Top trim
+    // Top trim (slightly outside; opaque)
     const top = new THREE.Mesh(wallGeo, wallTopMat);
     top.scale.set(w.sx + 0.05, 0.18, w.sz + 0.05);
     top.position.set(w.cx, wallH + 0.09, w.cz);
@@ -174,36 +281,141 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
   hole.position.set(goalCx, 0.02, goalCz);
   group.add(hole);
   // Glow ring
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd166, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false });
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(cellSize * 0.42, cellSize * 0.5, 48),
-    new THREE.MeshBasicMaterial({ color: 0xffd166, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+    ringMat
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(goalCx, 0.04, goalCz);
   group.add(ring);
+  // Pulsing pillar of light at goal (visible above walls)
+  const pillar = new THREE.Mesh(
+    new THREE.CylinderGeometry(cellSize*0.18, cellSize*0.30, 14, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false })
+  );
+  pillar.position.set(goalCx, 7, goalCz);
+  group.add(pillar);
   // Pole/flag (visible from far)
-  const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 4, 8);
+  const poleGeo = new THREE.CylinderGeometry(0.10, 0.10, 5, 8);
   const poleMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const pole = new THREE.Mesh(poleGeo, poleMat);
-  pole.position.set(goalCx, 2, goalCz);
+  pole.position.set(goalCx, 2.5, goalCz);
   group.add(pole);
-  const flagGeo = new THREE.PlaneGeometry(1.4, 0.9);
+  const flagGeo = new THREE.PlaneGeometry(1.6, 1.0);
   const flagMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, side: THREE.DoubleSide });
   const flag = new THREE.Mesh(flagGeo, flagMat);
-  flag.position.set(goalCx + 0.7, 3.4, goalCz);
+  flag.position.set(goalCx + 0.8, 4.4, goalCz);
   group.add(flag);
 
+  // ---- Hazards ----
+  const hazardMeshes = []; // { type, mesh, body, x, y, ...}
+
+  for (const hz of (maze.hazards || [])) {
+    const cx = hz.x * cellSize, cz = hz.y * cellSize;
+    if (hz.type === 'spinner') {
+      // Rotating bar that bumps players
+      const bar = new THREE.Group();
+      const armGeo = new THREE.BoxGeometry(cellSize * 0.85, 0.8, 0.45);
+      const armMat = new THREE.MeshStandardMaterial({ color: 0xff7a59, roughness: 0.4 });
+      const arm = new THREE.Mesh(armGeo, armMat);
+      arm.castShadow = true;
+      arm.position.y = 0.7;
+      bar.add(arm);
+      // Center hub
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.4, 0.4, 1.6, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 })
+      );
+      hub.position.y = 0.8;
+      bar.add(hub);
+      bar.position.set(cx, 0, cz);
+      group.add(bar);
+      hazardMeshes.push({ type: 'spinner', mesh: bar, x: hz.x, y: hz.y, speed: hz.speed, angle: 0 });
+    } else if (hz.type === 'bounce') {
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(cellSize * 0.42, cellSize * 0.42, 0.25, 24),
+        new THREE.MeshStandardMaterial({ color: 0x51cf66, emissive: 0x2c8a3f, emissiveIntensity: 0.35, roughness: 0.4 })
+      );
+      pad.position.set(cx, 0.13, cz);
+      pad.receiveShadow = true;
+      group.add(pad);
+      // Center ring
+      const r2 = new THREE.Mesh(
+        new THREE.RingGeometry(cellSize*0.20, cellSize*0.30, 24),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.7, depthWrite: false })
+      );
+      r2.rotation.x = -Math.PI/2;
+      r2.position.set(cx, 0.27, cz);
+      group.add(r2);
+      hazardMeshes.push({ type: 'bounce', mesh: pad, x: hz.x, y: hz.y, lastFireAt: 0 });
+    } else if (hz.type === 'mud') {
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(cellSize * 0.42, cellSize * 0.42, 0.08, 24),
+        new THREE.MeshStandardMaterial({ color: 0xb08968, roughness: 0.95 })
+      );
+      pad.position.set(cx, 0.05, cz);
+      group.add(pad);
+      // bubbles
+      for (let i = 0; i < 4; i++) {
+        const b = new THREE.Mesh(
+          new THREE.SphereGeometry(0.2, 10, 8),
+          new THREE.MeshStandardMaterial({ color: 0x6f5236, roughness: 0.9 })
+        );
+        b.position.set(cx + (Math.random()-0.5) * 1.6, 0.2, cz + (Math.random()-0.5) * 1.6);
+        group.add(b);
+      }
+      hazardMeshes.push({ type: 'mud', mesh: pad, x: hz.x, y: hz.y });
+    } else if (hz.type === 'pusher') {
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(cellSize * 0.42, cellSize * 0.42, 0.08, 24),
+        new THREE.MeshStandardMaterial({ color: 0x4dabf7, emissive: 0x2674b3, emissiveIntensity: 0.3, roughness: 0.5 })
+      );
+      pad.position.set(cx, 0.05, cz);
+      group.add(pad);
+      // Arrow
+      const arrowGeo = new THREE.ConeGeometry(0.55, 1.2, 4);
+      const arrow = new THREE.Mesh(arrowGeo, new THREE.MeshStandardMaterial({ color: 0xffffff }));
+      arrow.position.set(cx, 0.6, cz);
+      // dir: 0=N(-z),1=E(+x),2=S(+z),3=W(-x)
+      const rot = [Math.PI, Math.PI/2, 0, -Math.PI/2][hz.dir];
+      arrow.rotation.x = -Math.PI/2;
+      arrow.rotation.y = rot;
+      group.add(arrow);
+      hazardMeshes.push({ type: 'pusher', mesh: pad, x: hz.x, y: hz.y, dir: hz.dir });
+    }
+  }
+
   // Decorative grass tufts on outer area
-  for (let i = 0; i < 50; i++) {
-    const tx = (Math.random() - 0.5) * (totalW + 30);
-    const tz = (Math.random() - 0.5) * (totalH + 30);
-    if (Math.abs(tx - totalW / 2) < totalW / 2 + 2 && Math.abs(tz - totalH / 2) < totalH / 2 + 2) continue;
+  for (let i = 0; i < 80; i++) {
+    const tx = (Math.random() - 0.5) * (totalW + 60);
+    const tz = (Math.random() - 0.5) * (totalH + 60);
+    if (Math.abs(tx - totalW / 2) < totalW / 2 + 4 && Math.abs(tz - totalH / 2) < totalH / 2 + 4) continue;
     const tg = new THREE.Mesh(
       new THREE.ConeGeometry(0.2 + Math.random() * 0.2, 0.6, 5),
       new THREE.MeshStandardMaterial({ color: 0x8de07a })
     );
     tg.position.set(tx, 0.3, tz);
     group.add(tg);
+  }
+  // A few decorative trees in the far distance
+  for (let i = 0; i < 18; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 50 + Math.random() * 30;
+    const tx = totalW/2 - cellSize/2 + Math.cos(angle) * dist;
+    const tz = totalH/2 - cellSize/2 + Math.sin(angle) * dist;
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.5, 2, 6),
+      new THREE.MeshStandardMaterial({ color: 0x8b5a2b })
+    );
+    trunk.position.set(tx, 1, tz);
+    group.add(trunk);
+    const leaves = new THREE.Mesh(
+      new THREE.SphereGeometry(1.6 + Math.random()*0.5, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0x8de07a })
+    );
+    leaves.position.set(tx, 2.8, tz);
+    group.add(leaves);
   }
 
   return {
@@ -212,7 +424,11 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
     cellSize,
     wallH,
     goalPos: new THREE.Vector3(goalCx, 0, goalCz),
-    floorMesh: floor
+    floorMesh: floor,
+    hazardMeshes,
+    flag,
+    pillar,
+    ring
   };
 };
 
