@@ -3788,12 +3788,12 @@
         if (save.settings.preset === "easy") effectiveDead *= 1.5;
         else if (save.settings.preset === "hard") effectiveDead *= 0.5;
 
-        const dx = Math.abs(dGamma) < effectiveDead ? 0 : (dGamma - Math.sign(dGamma) * effectiveDead) / 20;
-        const dy = Math.abs(dBeta) < effectiveDead ? 0 : (dBeta - Math.sign(dBeta) * effectiveDead) / 20;
+        const dx = Math.abs(dGamma) < effectiveDead ? 0 : (dGamma - Math.sign(dGamma) * effectiveDead) / 18;
+        const dy = Math.abs(dBeta) < effectiveDead ? 0 : (dBeta - Math.sign(dBeta) * effectiveDead) / 18;
         
         // Invert dy because tilting forward (beta decrease) should move ship up
-        input.targetX = clamp(0.5 + dx * 1.2 * sens, 0.05, 0.95);
-        input.targetY = clamp(0.75 - dy * 1.0 * sens, 0.15, 0.95);
+        input.targetX = clamp(0.5 + dx * 1.3 * sens, 0.03, 0.97);
+        input.targetY = clamp(0.72 - dy * 1.1 * sens, 0.10, 0.95);
       } else if (game.mode === "touch") {
         if (input.touchActive) {
           if (input.touchAbsolute) {
@@ -3829,8 +3829,8 @@
       player.vy *= Math.pow(0.018, dt);
       player.x += player.vx * spd * dt;
       player.y += player.vy * spd * dt;
-      player.x = clamp(player.x, W * 0.07, W * 0.93);
-      player.y = clamp(player.y, H * 0.28, H * 0.92);
+      player.x = clamp(player.x, W * 0.05, W * 0.95);
+      player.y = clamp(player.y, H * 0.20, H * 0.95);
       player.bank = lerp(player.bank, clamp(player.vx / 380, -1, 1), 0.18);
     }
 
