@@ -39,7 +39,7 @@ Aether Drift: Ascensionは、プレイヤーが宇宙の奥深くで敵と戦う
 
 このプロジェクトはVercelにデプロイされています。
 
-**デプロイメントURL**: https://newgame.vercel.app
+**デプロイメントURL**: https://newgame-gray.vercel.app
 
 ## 📋 技術スタック
 
