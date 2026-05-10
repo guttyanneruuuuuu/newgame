@@ -354,6 +354,10 @@ BDR.game = (function() {
       const remain = startAtMs - now;
       if (remain > 0) {
         const num = Math.ceil(remain / 1000);
+        if (cdEl.dataset.lastNum !== String(num)) {
+          cdEl.dataset.lastNum = String(num);
+          if (BDR.sound) BDR.sound.countdown();
+        }
         cdEl.innerHTML = `<div class="countdown-num">${num}</div>`;
         requestAnimationFrame(tick);
       } else {
@@ -362,6 +366,7 @@ BDR.game = (function() {
         raceStartedAt = now;
         startTime = now;
         countdownActive = false;
+        if (BDR.sound) BDR.sound.go();
         setTimeout(() => cdEl.classList.add('hidden'), 700);
       }
     };
@@ -446,6 +451,7 @@ BDR.game = (function() {
     lastDashAt[me.id] = now;
     me.mesh.scale.setScalar(1.25);
     setTimeout(() => { try { me.mesh.scale.setScalar(1); } catch(e){} }, 180);
+    if (BDR.sound) BDR.sound.dash();
     return true;
   }
 
@@ -502,6 +508,7 @@ BDR.game = (function() {
                 { x: (a.body.position.x+b.body.position.x)/2, y: a.body.position.y+0.3, z: (a.body.position.z+b.body.position.z)/2 },
                 0xffffff);
               a._lastFlash = now; b._lastFlash = now;
+              if (BDR.sound && (a.isMe || b.isMe)) BDR.sound.bump();
             }
           }
         }
@@ -551,6 +558,7 @@ BDR.game = (function() {
             if (performance.now() - (p._lastBouncedAt||0) > 400) {
               p.body.velocity.y = Math.max(p.body.velocity.y, 11);
               p._lastBouncedAt = performance.now();
+              if (p.isMe && BDR.sound) BDR.sound.bounce();
             }
           }
         }
@@ -640,6 +648,7 @@ BDR.game = (function() {
             pu.taken = true;
             pu.mesh.visible = false;
             p.boostUntil = performance.now() + 2400;
+            if (p.isMe && BDR.sound) BDR.sound.pickup();
           }
         }
       }
@@ -691,6 +700,7 @@ BDR.game = (function() {
           p.finishTime = Date.now() - raceStartedAt;
           p.mesh.visible = false;
           if (p.label) p.label.visible = false;
+          if (p.isMe && BDR.sound) BDR.sound.goal();
         }
       }
       if (finishedCount >= players.length) endRace();

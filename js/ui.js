@@ -250,6 +250,14 @@ window.BDR = window.BDR || {};
     // pause
     $('btn-pause').onclick = () => $('pause-overlay').classList.remove('hidden');
     $('btn-resume').onclick = () => $('pause-overlay').classList.add('hidden');
+    const recalBtn = $('btn-recal');
+    if (recalBtn) {
+      recalBtn.onclick = () => {
+        BDR.controls.recalibrate();
+        recalBtn.textContent = 'OK';
+        setTimeout(() => recalBtn.textContent = 'RESET', 700);
+      };
+    }
     $('btn-quit').onclick = () => {
       BDR.network.destroy();
       $('pause-overlay').classList.add('hidden');

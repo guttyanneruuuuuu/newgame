@@ -419,6 +419,25 @@ body::before {
   box-shadow: var(--shadow);
   cursor: pointer;
 }
+.hud-recal {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 76px);
+  right: 14px;
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4ec3ff, #6ea7ff);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: inherit;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.2);
+}
+.hud-recal:active { transform: translateY(2px); }
 
 .hud-dash {
   position: absolute;

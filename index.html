@@ -133,6 +133,7 @@
       </div>
       <div class="hud-leaderboard" id="hud-leaderboard"></div>
       <button class="hud-pause" id="btn-pause">⏸</button>
+      <button class="hud-recal" id="btn-recal" title="ジャイロ基準を今の姿勢にリセット">RESET</button>
     <button class="hud-dash" id="btn-dash" title="ダッシュ体当たり">
       <span class="hud-dash-label">DASH</span>
       <svg class="hud-dash-cool" viewBox="0 0 36 36">
@@ -190,7 +191,7 @@
     (function(){
       const scripts = [
         'js/utils.js','js/maze.js','js/controls.js',
-        'js/network.js','js/ai.js','js/items.js','js/game.js','js/ui.js'
+        'js/network.js','js/ai.js','js/items.js','js/sound.js','js/game.js','js/ui.js'
       ];
       function loadSeq(i){
         if (i >= scripts.length) return;
