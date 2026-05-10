@@ -734,9 +734,11 @@ BDR.game = (function() {
     const me = players.find(pp => pp.isMe);
     if (me) {
       const target = new THREE.Vector3(me.body.position.x, me.body.position.y, me.body.position.z);
+      // If player is falling (y<0), pull camera down with them so they stay in view.
+      const fallOffset = Math.min(0, me.body.position.y) * 0.6;
       const desired = new THREE.Vector3(
         target.x,
-        target.y + cfg.cameraHeight,
+        Math.max(target.y + cfg.cameraHeight + fallOffset, -2),
         target.z + cfg.cameraDist
       );
       camera.position.lerp(desired, 0.18);

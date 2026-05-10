@@ -325,6 +325,17 @@ window.BDR = window.BDR || {};
         }
       });
     }
+    // Keyboard 'R' to recalibrate gyro (handy when testing on phones via remote)
+    window.addEventListener('keydown', (e) => {
+      if ($('screen-game').classList.contains('visible') && (e.key === 'r' || e.key === 'R')) {
+        BDR.controls.recalibrate();
+        const recal = $('btn-recal');
+        if (recal) {
+          recal.textContent = 'OK';
+          setTimeout(() => recal.textContent = 'RESET', 700);
+        }
+      }
+    });
     function tick() {
       // Time
       const t = BDR.game.getElapsed();
