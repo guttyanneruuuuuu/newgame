@@ -15,22 +15,22 @@
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
   <style>
     :root {
-      --bg-top: #070b18;
-      --bg-mid: #0b1428;
-      --bg-bottom: #03060f;
-      --panel: rgba(10, 18, 34, 0.78);
-      --panel-2: rgba(20, 32, 56, 0.65);
-      --panel-border: rgba(167, 230, 255, 0.18);
-      --text: #ebfdff;
-      --muted: rgba(228, 246, 255, 0.7);
-      --dim: rgba(228, 246, 255, 0.45);
-      --accent: #5ef6ff;
-      --accent-2: #ffdf73;
-      --accent-3: #c1a3ff;
-      --danger: #ff7b8c;
-      --good: #83f8be;
-      --gold: #ffd866;
-      --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+      --bg-top: #050814;
+      --bg-mid: #081022;
+      --bg-bottom: #02040a;
+      --panel: rgba(12, 22, 42, 0.82);
+      --panel-2: rgba(25, 40, 70, 0.7);
+      --panel-border: rgba(94, 246, 255, 0.25);
+      --text: #f0ffff;
+      --muted: rgba(200, 240, 255, 0.75);
+      --dim: rgba(200, 240, 255, 0.5);
+      --accent: #00f2ff;
+      --accent-2: #ffe082;
+      --accent-3: #d1b3ff;
+      --danger: #ff5e7e;
+      --good: #5effb8;
+      --gold: #ffcc33;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
       --safe-bottom: max(20px, env(safe-area-inset-bottom));
       --safe-top: max(14px, env(safe-area-inset-top));
       --safe-left: max(12px, env(safe-area-inset-left));
@@ -178,14 +178,15 @@
     }
     h1 {
       margin: 0;
-      font-size: clamp(2.0rem, 9vw, 3.2rem);
+      font-size: clamp(2.2rem, 10vw, 3.6rem);
       font-weight: 900;
-      letter-spacing: 0.02em;
-      background: linear-gradient(135deg, #c8ff8b 0%, #5ef6ff 45%, #c1a3ff 90%);
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 20%, #5ef6ff 50%, #c1a3ff 80%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      filter: drop-shadow(0 4px 22px rgba(94,246,255,0.25));
+      filter: drop-shadow(0 0 15px rgba(94,246,255,0.4));
+      text-transform: uppercase;
     }
     h2 {
       margin: 0 0 8px;
@@ -235,23 +236,27 @@
     button, .btn {
       appearance: none;
       border: none;
-      border-radius: 999px;
-      padding: 13px 18px;
+      border-radius: 16px;
+      padding: 14px 22px;
       font: inherit;
       font-weight: 800;
-      letter-spacing: 0.02em;
-      color: #03101c;
-      background: linear-gradient(135deg, #c8ff8b, #5ef6ff 70%);
-      box-shadow: 0 10px 28px rgba(94, 246, 255, 0.28);
+      letter-spacing: 0.01em;
+      color: #001a1a;
+      background: linear-gradient(135deg, #a7ffeb, #00f2ff 80%);
+      box-shadow: 0 8px 20px rgba(0, 242, 255, 0.25), inset 0 1px 1px rgba(255,255,255,0.5);
       cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, filter 0.15s ease;
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      min-height: 44px;
+      gap: 10px;
+      min-height: 48px;
       text-align: center;
       line-height: 1.2;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 25px rgba(0, 242, 255, 0.35), inset 0 1px 1px rgba(255,255,255,0.5);
     }
 
     button:active, .btn:active { transform: translateY(1px) scale(0.98); }
@@ -3077,11 +3082,11 @@
           game.vsPeerScore = +msg.score || 0;
           game.vsPeerCharge = +msg.charge || 0;
           game.vsPeerOver = +msg.over || 0;
-          // Occasional muzzle bullet from peer
-          if (msg.firing && Math.random() < 0.18) {
-            const bx = clamp(game.vsPeerTargetX * W, 8, W - 8);
-            const by = clamp(game.vsPeerTargetY * H + 18, 30, H * 0.4);
-            peerBullets.push({ x: bx, y: by, life: 1.4 });
+          // Improved peer bullet sync
+          if (msg.firing && Math.random() < 0.25) {
+            const bx = (1 - game.vsPeerTargetX) * W; // Invert X for peer view
+            const by = 40; // Peer fires from top
+            peerBullets.push({ x: bx, y: by, life: 1.6 });
           }
         } else if (msg.t === "hit") {
           // Peer reports they overdrove us → take damage
@@ -3349,7 +3354,7 @@
         vx: opt.vx ?? 0,
         vy: (opt.vy ?? 240) * diff,
         r: opt.r ?? 18,
-        hp: (opt.hp ?? 2) * (1 + (diff - 1) * 0.4),
+        hp: (opt.hp ?? 3) * (1 + (diff - 1) * 0.5),
         worth: opt.worth ?? 80,
         wobble: srand(0, TAU),
         amp: opt.amp ?? 0,
@@ -3369,12 +3374,12 @@
       };
       if (type === "mine") {
         base.r = opt.r ?? 26;
-        base.hp = (opt.hp ?? 5) * (1 + (diff - 1) * 0.4);
+        base.hp = (opt.hp ?? 8) * (1 + (diff - 1) * 0.5);
         base.worth = opt.worth ?? 180;
         base.vy = (opt.vy ?? 170) * diff;
       } else if (type === "drone") {
         base.r = opt.r ?? 20;
-        base.hp = (opt.hp ?? 4) * (1 + (diff - 1) * 0.4);
+        base.hp = (opt.hp ?? 6) * (1 + (diff - 1) * 0.5);
         base.worth = opt.worth ?? 130;
         base.vy = (opt.vy ?? 205) * diff;
       } else if (type === "beam") {
@@ -3798,13 +3803,13 @@
 
       const tx = input.targetX * W;
       const ty = input.targetY * H;
-      const baseSpring = player.overdrive > 0 ? 22 : 18;
+      const baseSpring = player.overdrive > 0 ? 26 : 22;
       const spring = baseSpring * stats.agility;
       const spd = stats.speed;
       player.vx += (tx - player.x) * spring * dt;
       player.vy += (ty - player.y) * spring * dt;
-      player.vx *= Math.pow(0.022, dt);
-      player.vy *= Math.pow(0.022, dt);
+      player.vx *= Math.pow(0.018, dt);
+      player.vy *= Math.pow(0.018, dt);
       player.x += player.vx * spd * dt;
       player.y += player.vy * spd * dt;
       player.x = clamp(player.x, W * 0.07, W * 0.93);
