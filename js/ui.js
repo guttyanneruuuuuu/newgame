@@ -364,6 +364,30 @@ window.BDR = window.BDR || {};
           }
         }
       }
+      // Speed meter
+      if (BDR.game.getMySpeed) {
+        const s = BDR.game.getMySpeed();
+        const f = $('hud-speed-fill');
+        const v = $('hud-speed-val');
+        if (f) f.style.width = (s.ratio * 100).toFixed(0) + '%';
+        if (v) v.textContent = s.speed.toFixed(1);
+      }
+      // Race stats toast (when someone finishes)
+      if (BDR.game.getRaceStats) {
+        const rs = BDR.game.getRaceStats();
+        if (typeof ui._lastFinished === 'undefined') ui._lastFinished = 0;
+        if (rs.finished > ui._lastFinished) {
+          ui._lastFinished = rs.finished;
+          const toast = $('hud-toast');
+          if (toast) {
+            const rem = rs.total - rs.finished;
+            toast.textContent = rem > 0 ? `あと${rem}人！` : 'FINISH!';
+            toast.classList.add('show');
+            clearTimeout(ui._toastTo);
+            ui._toastTo = setTimeout(() => toast.classList.remove('show'), 1400);
+          }
+        }
+      }
       // Apply control input pump
       BDR.controls.update();
 

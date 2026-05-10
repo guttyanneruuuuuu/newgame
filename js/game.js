@@ -912,6 +912,20 @@ BDR.game = (function() {
     return { rank: idx + 1, total: r.length };
   }
 
+  function getMySpeed() {
+    const me = players.find(pp => pp.isMe);
+    if (!me) return { speed: 0, ratio: 0 };
+    const v = me.body.velocity;
+    const sp = Math.hypot(v.x, v.z);
+    return { speed: sp, ratio: Math.min(1, sp / cfg.maxSpeed) };
+  }
+
+  function getRaceStats() {
+    const total = players.length;
+    const finished = players.filter(p => p.finished).length;
+    return { total, finished, remaining: total - finished };
+  }
+
   // Returns { angle: radians (0=up screen, +x=right), distance: meters }
   function getGoalInfo() {
     const me = players.find(pp => pp.isMe);
@@ -952,6 +966,7 @@ BDR.game = (function() {
     setNetworkInput, applyNetworkSnapshot,
     getRanking, getMyRank, getElapsed, getPlayers: () => players,
     tryLocalDash, getDashCooldownRatio, getGoalInfo,
+    getMySpeed, getRaceStats,
     manualEnd
   };
 })();

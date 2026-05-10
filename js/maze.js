@@ -386,6 +386,30 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
     }
   }
 
+  // Decorative clouds (simple white spheres in distance)
+  for (let i = 0; i < 12; i++) {
+    const cloudGroup = new THREE.Group();
+    const baseAng = Math.random() * Math.PI * 2;
+    const baseDist = 80 + Math.random() * 40;
+    const cx = totalW/2 - cellSize/2 + Math.cos(baseAng) * baseDist;
+    const cz = totalH/2 - cellSize/2 + Math.sin(baseAng) * baseDist;
+    const cy = 22 + Math.random() * 10;
+    for (let k = 0; k < 4; k++) {
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(2.5 + Math.random() * 1.5, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
+      );
+      puff.position.set(
+        (Math.random() - 0.5) * 5,
+        (Math.random() - 0.5) * 0.6,
+        (Math.random() - 0.5) * 5
+      );
+      cloudGroup.add(puff);
+    }
+    cloudGroup.position.set(cx, cy, cz);
+    group.add(cloudGroup);
+  }
+
   // Decorative grass tufts on outer area
   for (let i = 0; i < 80; i++) {
     const tx = (Math.random() - 0.5) * (totalW + 60);

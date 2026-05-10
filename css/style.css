@@ -436,6 +436,64 @@ body::before {
   text-align: right;
 }
 
+.hud-speed {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.88);
+  padding: 6px 12px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  font-weight: 800;
+  font-size: 12px;
+}
+.hud-speed-bar {
+  width: 110px;
+  height: 8px;
+  background: #e1ecf7;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.hud-speed-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #51cf66, #ffd166, #ff7a59);
+  transition: width 0.08s linear;
+}
+.hud-speed span {
+  font-variant-numeric: tabular-nums;
+  min-width: 24px;
+  text-align: right;
+  color: var(--ink);
+}
+
+.hud-toast {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255,255,255,0.95);
+  color: var(--primary);
+  padding: 10px 22px;
+  border-radius: 18px;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 1px;
+  box-shadow: var(--shadow-strong);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+}
+.hud-toast.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
 .hud-pause {
   position: absolute;
   bottom: calc(var(--safe-bottom) + 14px);
