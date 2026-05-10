@@ -37,6 +37,9 @@ BDR.game = (function() {
   let snapInterp = { from: null, to: null, atFromMs: 0, atToMs: 0 };
   let resetCallback = null;
   let powerups = [];
+  let projectiles = [];     // active projectiles (host only)
+  let lastShotAt = {};      // playerId -> timestamp of last projectile shot
+  let lastDashAt = {};      // playerId -> timestamp of last dash
 
   function init(container) {
     const canvas = document.getElementById('game-canvas');
@@ -274,6 +277,15 @@ BDR.game = (function() {
       }
     }
     players = [];
+    // Clear projectiles
+    for (const pj of projectiles) {
+      scene.remove(pj.mesh);
+      if (pj.trail) scene.remove(pj.trail);
+      if (physWorld) physWorld.removeBody(pj.body);
+    }
+    projectiles = [];
+    lastShotAt = {};
+    lastDashAt = {};
 
     // Build maze
     maze = BDR.generateMaze(mazeSeed, cfg.mazeW, cfg.mazeH);
@@ -337,6 +349,82 @@ BDR.game = (function() {
     return body.position.y < cfg.ballRadius + 0.5;
   }
 
+  // CPU tries to shoot at the nearest opponent within range
+  function tryCPUShoot(cpu) {
+    if (!BDR.items) return;
+    const now = performance.now();
+    const last = lastShotAt[cpu.id] || 0;
+    const cooldown = BDR.items.cfg.projCooldownMs * (1.6 - cpu.bot.skill * 0.6); // skilled CPUs fire faster
+    if (now - last < cooldown) return;
+    const range = BDR.items.cfg.projRangeCells * cfg.cellSize;
+    let target = null, bestD = Infinity;
+    for (const o of players) {
+      if (o.id === cpu.id || o.finished) continue;
+      const dx = o.body.position.x - cpu.body.position.x;
+      const dz = o.body.position.z - cpu.body.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d < range && d < bestD) { bestD = d; target = o; }
+    }
+    if (!target) return;
+    // Predict target position based on velocity
+    const lead = 0.25;
+    const px = target.body.position.x + target.body.velocity.x * lead;
+    const pz = target.body.position.z + target.body.velocity.z * lead;
+    const dx = px - cpu.body.position.x;
+    const dz = pz - cpu.body.position.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const dir = { x: dx / d, z: dz / d };
+    const fromPos = new THREE.Vector3(
+      cpu.body.position.x + dir.x * (cfg.ballRadius + BDR.items.cfg.projRadius + 0.1),
+      cpu.body.position.y + 0.1,
+      cpu.body.position.z + dir.z * (cfg.ballRadius + BDR.items.cfg.projRadius + 0.1)
+    );
+    const colorInt = parseInt((cpu.color || '#ffaa00').slice(1), 16);
+    const pj = BDR.items.makeProjectile(scene, physWorld, physWorld._mats.ballMat, cpu, fromPos, dir, colorInt);
+    projectiles.push(pj);
+    lastShotAt[cpu.id] = now;
+  }
+
+  // Local player dash (bumps in current move direction)
+  function tryLocalDash() {
+    const me = players.find(pp => pp.isMe);
+    if (!me || me.finished) return false;
+    const now = performance.now();
+    const last = lastDashAt[me.id] || 0;
+    if (now - last < BDR.items.cfg.dashCooldownMs) return false;
+    const inp = BDR.controls.state.input;
+    let dx = inp.x, dz = inp.z;
+    if (dx*dx + dz*dz < 0.04) {
+      // Use current velocity as direction if input is small
+      const v = me.body.velocity;
+      const sp = Math.hypot(v.x, v.z);
+      if (sp > 0.4) { dx = v.x / sp; dz = v.z / sp; }
+      else if (me._smoothDir) { dx = me._smoothDir.x; dz = me._smoothDir.z; }
+      else { dx = 0; dz = -1; }
+    } else {
+      const d = Math.hypot(dx, dz) || 1;
+      dx /= d; dz /= d;
+    }
+    const imp = BDR.items.cfg.dashImpulse;
+    me.body.velocity.x += dx * imp;
+    me.body.velocity.z += dz * imp;
+    me.body.velocity.y += 1.5;
+    lastDashAt[me.id] = now;
+    // Visual: brief scale flash
+    me.mesh.scale.setScalar(1.25);
+    setTimeout(() => { try { me.mesh.scale.setScalar(1); } catch(e){} }, 180);
+    return true;
+  }
+
+  function getDashCooldownRatio() {
+    const me = players.find(pp => pp.isMe);
+    if (!me) return 0;
+    const last = lastDashAt[me.id] || 0;
+    const elapsed = performance.now() - last;
+    if (!BDR.items) return 1;
+    return Math.min(1, elapsed / BDR.items.cfg.dashCooldownMs);
+  }
+
   function tick(dt) {
     if (!running && !countdownActive) {
       // Even before start, allow physics for a little settle
@@ -350,6 +438,8 @@ BDR.game = (function() {
         if (p.isCPU) {
           const inp = BDR.ai.tick(p.bot, maze, cfg.cellSize, p.body, maze.goalCell, dt);
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
+          // CPUs may shoot projectiles at nearby opponents
+          if (running) tryCPUShoot(p);
         } else if (p.isMe) {
           const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
@@ -358,6 +448,8 @@ BDR.game = (function() {
           if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
         }
       }
+      // Update projectiles
+      if (BDR.items) BDR.items.update(scene, physWorld, players, projectiles, dt);
     } else {
       // Client: only push our local input to network. Visuals come from snapshots.
       const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
@@ -610,6 +702,7 @@ BDR.game = (function() {
     cfg, init, setup, startCountdown, startLoop,
     setNetworkInput, applyNetworkSnapshot,
     getRanking, getMyRank, getElapsed, getPlayers: () => players,
+    tryLocalDash, getDashCooldownRatio,
     manualEnd
   };
 })();

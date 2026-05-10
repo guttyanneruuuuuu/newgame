@@ -130,6 +130,14 @@
       <div class="hud-mini" id="hud-mini"></div>
       <div class="hud-leaderboard" id="hud-leaderboard"></div>
       <button class="hud-pause" id="btn-pause">⏸</button>
+    <button class="hud-dash" id="btn-dash" title="ダッシュ体当たり">
+      <span class="hud-dash-label">DASH</span>
+      <svg class="hud-dash-cool" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="16" stroke="rgba(255,255,255,0.6)" stroke-width="3" fill="none"/>
+        <circle id="hud-dash-arc" cx="18" cy="18" r="16" stroke="#ff7a59" stroke-width="3" fill="none"
+                stroke-dasharray="100.53" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
+      </svg>
+    </button>
     </div>
 
     <!-- Gyro permission overlay (iOS) -->
@@ -179,7 +187,7 @@
     (function(){
       const scripts = [
         'js/utils.js','js/maze.js','js/controls.js',
-        'js/network.js','js/ai.js','js/game.js','js/ui.js'
+        'js/network.js','js/ai.js','js/items.js','js/game.js','js/ui.js'
       ];
       function loadSeq(i){
         if (i >= scripts.length) return;

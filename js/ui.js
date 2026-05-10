@@ -304,6 +304,19 @@ window.BDR = window.BDR || {};
 
   // --- HUD updater ---
   function startHud() {
+    const dashBtn = $('btn-dash');
+    const dashArc = $('hud-dash-arc');
+    const arcLen = 100.53;
+    if (dashBtn) {
+      dashBtn.onclick = () => BDR.game.tryLocalDash && BDR.game.tryLocalDash();
+      // Spacebar dash
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && $('screen-game').classList.contains('visible')) {
+          e.preventDefault();
+          BDR.game.tryLocalDash && BDR.game.tryLocalDash();
+        }
+      });
+    }
     function tick() {
       // Time
       const t = BDR.game.getElapsed();
@@ -321,6 +334,13 @@ window.BDR = window.BDR || {};
           <span>${escapeHtml(p.name)}${p.finished ? ' ✓' : ''}</span>
         </div>
       `).join('');
+      // Dash cooldown ring
+      if (dashArc && BDR.game.getDashCooldownRatio) {
+        const ratio = BDR.game.getDashCooldownRatio();
+        dashArc.setAttribute('stroke-dashoffset', String(arcLen * (1 - ratio)));
+        if (ratio >= 1) dashBtn.classList.remove('cooling');
+        else dashBtn.classList.add('cooling');
+      }
       // Apply control input pump
       BDR.controls.update();
 

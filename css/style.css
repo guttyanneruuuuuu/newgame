@@ -414,6 +414,41 @@ body::before {
   cursor: pointer;
 }
 
+.hud-dash {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 14px);
+  right: 78px;
+  width: 78px; height: 78px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff7a59, #ffb14d);
+  color: #fff;
+  border: 3px solid #fff;
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 1px;
+  pointer-events: auto;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.18), var(--shadow);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.2);
+  position: absolute;
+}
+.hud-dash:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,0.18); }
+.hud-dash-label { z-index: 2; }
+.hud-dash-cool {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.hud-dash.cooling {
+  filter: grayscale(0.65) brightness(0.85);
+}
+
 /* ============== Gyro Overlay ============== */
 .gyro-overlay {
   position: fixed; inset: 0;
