@@ -1339,7 +1339,7 @@
 
       <div class="panel">
         <h3>遊びかた</h3>
-        <div class="tut-step"><b>① 傾ける</b> — 端末を左右に傾けると機体が動きます。前後で上下移動。</div>
+        <div class="tut-step"><b>① 傾ける</b> — 左右に傾けると左右移動。<b>奥に倒す＝上／手前に倒す＝下</b>。小さな傾きで動きます。</div>
         <div class="tut-step"><b>② 弾は自動射撃</b> — 当てるだけで敵を破壊。コア✦が稼げます。</div>
         <div class="tut-step"><b>③ ニアミスで FLOW</b> — ギリギリ回避と連続撃破で倍率UP！100%でOVERDRIVE発動。</div>
         <div class="tut-step"><b>④ 強化&装備</b> — ✦コアでガチャ、★スターダストで装備強化。</div>
@@ -2734,28 +2734,39 @@
         console.log("DeviceOrientationEvent is not supported");
         return false;
       }
+      // Re-bind listener defensively (covers cases where the page was bfcache-restored)
+      try {
+        window.removeEventListener("deviceorientation", onDeviceOrientation, true);
+        window.addEventListener("deviceorientation", onDeviceOrientation, true);
+      } catch(e){}
       if (typeof window.DeviceOrientationEvent.requestPermission === "function") {
         try {
           const r = await window.DeviceOrientationEvent.requestPermission();
           if (r === "granted") {
-            // Re-bind listener just in case
             window.removeEventListener("deviceorientation", onDeviceOrientation, true);
             window.addEventListener("deviceorientation", onDeviceOrientation, true);
             return true;
           }
           return false;
-        } catch(e) { 
+        } catch(e) {
           console.error("Permission request failed", e);
-          return false; 
+          return false;
         }
       }
       return true;
     }
 
     function onDeviceOrientation(e) {
-      if (typeof e.gamma === "number") input.gamma = e.gamma;
-      if (typeof e.beta === "number") input.beta = e.beta;
+      if (typeof e.gamma === "number" && !isNaN(e.gamma)) input.gamma = e.gamma;
+      if (typeof e.beta === "number" && !isNaN(e.beta)) input.beta = e.beta;
       input.sensorSamples += 1;
+      // First valid sample: lock baseline so we don't get a snap on the first frame.
+      if (input.sensorSamples === 1) {
+        input.filteredGamma = input.gamma;
+        input.filteredBeta = input.beta;
+        input.baseGamma = input.gamma;
+        input.baseBeta = input.beta;
+      }
     }
     window.addEventListener("deviceorientation", onDeviceOrientation, true);
 
@@ -2886,7 +2897,8 @@
       game.maxFlow = 1;
       game.diffMul = 1;
       game.endlessWave = 1;
-      game.sensorWatch = game.mode === "gyro" ? 1.4 : 0;
+      // Wait longer for the first sensor samples (was 1.4s; some Androids take >2s)
+      game.sensorWatch = game.mode === "gyro" ? 3.0 : 0;
       timeScale = 1;
       timeScaleTimer = 0;
       input.touchActive = false;
@@ -2915,6 +2927,11 @@
         }
       } else {
         game.mode = pref; // touch | joystick
+      }
+
+      // If user picked auto/gyro, but no samples yet, we'll provisionally start in gyro and keep watching.
+      if ((save.settings.ctrl || "auto") !== "touch" && save.settings.ctrl !== "joystick") {
+        if (input.sensorSamples > 0) game.mode = "gyro";
       }
 
       game.kind = opts.kind || "story";
@@ -3769,8 +3786,9 @@
 
     function updateInput(dt) {
       // Adaptive filtering based on preset
+      // Higher value = more smoothing (slower response). Tuned to keep stable feel.
       const preset = save.settings.preset || "normal";
-      const filterStrength = preset === "easy" ? 0.0005 : preset === "hard" ? 0.002 : 0.001;
+      const filterStrength = preset === "easy" ? 0.00005 : preset === "hard" ? 0.0008 : 0.0002;
       input.filteredGamma = lerp(input.filteredGamma, input.gamma, 1 - Math.pow(filterStrength, dt));
       input.filteredBeta = lerp(input.filteredBeta, input.beta, 1 - Math.pow(filterStrength, dt));
 
@@ -3784,29 +3802,49 @@
         const nearCenter = Math.abs(input.targetX - 0.5) < 0.06 && Math.abs(input.targetY - 0.78) < 0.05;
         if (nearCenter) {
           const a = 1 - Math.pow(0.4, dt); // slow drift
-          input.baseGamma = lerp(input.baseGamma, input.filteredGamma, a * 0.3);
-          input.baseBeta = lerp(input.baseBeta, input.filteredBeta, a * 0.3);
+          input.baseGamma = lerp(input.baseGamma, input.filteredGamma, a * 0.25);
+          input.baseBeta = lerp(input.baseBeta, input.filteredBeta, a * 0.25);
         }
       }
 
       if (game.mode === "gyro" && input.sensorSamples > 0) {
-        // More intuitive mapping: 
-        // Gamma (left/right tilt) -> X
-        // Beta (forward/backward tilt) -> Y
-        // We use a slightly more aggressive scaling for better feel
+        // === Gyro mapping ===
+        // gamma : left(-) / right(+) tilt  -> ship X
+        // beta  : front(-, screen tilted away) / back(+) tilt  -> ship Y
+        //
+        // User-requested behaviour:
+        //   - Tilting the phone AWAY (top of phone goes down → beta decreases)
+        //     should move the ship UP (toward top of screen).
+        //     => targetY decreases when dBeta is negative.
+        //     => targetY = base + dBeta * k  (positive k, NOT inverted)
+        //   - Smaller, finer movement (less sensitivity, smaller swing).
         const dGamma = (input.filteredGamma - input.baseGamma);
         const dBeta = (input.filteredBeta - input.baseBeta);
-        
-        let effectiveDead = dead * 15; // Scale deadzone to degrees
-        if (save.settings.preset === "easy") effectiveDead *= 1.5;
-        else if (save.settings.preset === "hard") effectiveDead *= 0.5;
 
-        const dx = Math.abs(dGamma) < effectiveDead ? 0 : (dGamma - Math.sign(dGamma) * effectiveDead) / 18;
-        const dy = Math.abs(dBeta) < effectiveDead ? 0 : (dBeta - Math.sign(dBeta) * effectiveDead) / 18;
-        
-        // Invert dy because tilting forward (beta decrease) should move ship up
-        input.targetX = clamp(0.5 + dx * 1.3 * sens, 0.03, 0.97);
-        input.targetY = clamp(0.72 - dy * 1.1 * sens, 0.10, 0.95);
+        // Deadzone in degrees. Smaller dead zone, but still cancels micro-jitter.
+        let effectiveDead = Math.max(1.5, dead * 12);
+        if (save.settings.preset === "easy") effectiveDead *= 1.6;
+        else if (save.settings.preset === "hard") effectiveDead *= 0.6;
+
+        // Convert tilt degrees to a normalised unit. Bigger divisor = smaller motion.
+        // Players reported the swing was too wide, so increase divisor (was 18).
+        const xDiv = 36; // degrees of tilt to reach full swing
+        const yDiv = 32;
+        const dx = Math.abs(dGamma) < effectiveDead ? 0 : (dGamma - Math.sign(dGamma) * effectiveDead) / xDiv;
+        const dy = Math.abs(dBeta) < effectiveDead ? 0 : (dBeta - Math.sign(dBeta) * effectiveDead) / yDiv;
+
+        // Reduced amplitude (was 1.3 / 1.1). User asked for smaller motion.
+        const ampX = 0.55 * sens;
+        const ampY = 0.50 * sens;
+        // Smooth-clamp via tanh so close-to-edge motion eases instead of slamming the wall.
+        const sx = Math.tanh(dx * ampX * 1.6) * 0.55;
+        const sy = Math.tanh(dy * ampY * 1.6) * 0.55;
+
+        // X: tilt right -> move right (positive)
+        // Y: tilt phone away from you (top of phone goes down, beta decreases / dBeta<0)
+        //    -> ship moves UP (targetY smaller). So Y uses POSITIVE sign.
+        input.targetX = clamp(0.5 + sx, 0.06, 0.94);
+        input.targetY = clamp(0.72 + sy, 0.18, 0.92);
       } else if (game.mode === "touch") {
         if (input.touchActive) {
           if (input.touchAbsolute) {
@@ -4113,11 +4151,23 @@
 
       if (game.sensorWatch > 0) {
         game.sensorWatch -= dt;
-        if (input.sensorSamples > 0) game.sensorWatch = 0;
+        if (input.sensorSamples > 2) game.sensorWatch = 0;
         else if (game.sensorWatch <= 0 && game.mode === "gyro") {
-          game.mode = "touch";
-          showToast("ジャイロ未検出: タッチ操作");
+          // Only fall back if the user didn't explicitly pick gyro
+          if ((save.settings.ctrl || "auto") !== "gyro") {
+            game.mode = "touch";
+            showToast("ジャイロ未検出：タッチ操作");
+          } else {
+            // Keep waiting silently
+            game.sensorWatch = 0;
+          }
         }
+      }
+      // If gyro samples arrive after we'd already fallen back, switch back to gyro.
+      if (input.sensorSamples > 2 && game.mode === "touch" &&
+          ((save.settings.ctrl || "auto") === "auto" || save.settings.ctrl === "gyro")) {
+        game.mode = "gyro";
+        hideJoy();
       }
 
       if (game.chainTimer > 0) {
