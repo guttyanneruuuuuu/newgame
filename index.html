@@ -6,7 +6,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#070b18">
+  <meta name="description" content="ジャイロ操作で宇宙を駆け抜けるシューターアーケード。合言葉でフレンド対戦できるオンラインVSモード搭載。">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
   <title>Aether Drift : Ascension</title>
+  <!-- PeerJS for friend-vs-friend matches via codename rooms (loads on demand for VS) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
   <style>
     :root {
       --bg-top: #070b18;
@@ -294,8 +300,8 @@
       bottom: 0;
       margin-top: auto;
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
       padding: 8px;
       border-radius: 22px;
       background: rgba(8, 14, 28, 0.85);
@@ -308,19 +314,21 @@
       background: transparent;
       box-shadow: none;
       color: var(--muted);
-      border-radius: 16px;
-      padding: 10px 4px;
-      font-size: 0.75rem;
-      letter-spacing: 0.06em;
+      border-radius: 14px;
+      padding: 9px 2px;
+      font-size: 0.66rem;
+      letter-spacing: 0.04em;
       flex-direction: column;
-      gap: 4px;
-      min-height: 56px;
+      gap: 3px;
+      min-height: 54px;
+      min-width: 0;
       font-weight: 700;
     }
     .tab-btn .ti {
-      font-size: 1.25rem;
+      font-size: 1.18rem;
       line-height: 1;
     }
+    .tab-btn .tlabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
     .tab-btn.active {
       background: linear-gradient(180deg, rgba(94,246,255,0.18), rgba(94,246,255,0.05));
       color: var(--text);
@@ -918,6 +926,288 @@
       height: 100%;
       background: linear-gradient(90deg, #ff5b6e, #ffd66a);
     }
+
+    /* ============ VS / Multiplayer ============ */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .mode-tile {
+      padding: 14px 12px;
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(94,246,255,0.12), rgba(193,163,255,0.08));
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 96px;
+    }
+    .mode-tile:active { transform: scale(0.98); }
+    .mode-tile.hot { border-color: rgba(255,122,214,0.45); background: linear-gradient(145deg, rgba(255,122,214,0.18), rgba(94,246,255,0.10)); }
+    .mode-tile .mt-ic { font-size: 1.6rem; }
+    .mode-tile .mt-title { font-weight: 900; font-size: 1.05rem; }
+    .mode-tile .mt-desc { color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
+    .mode-tile.full { grid-column: 1 / -1; }
+    .mode-tile .mt-pill {
+      align-self: flex-start;
+      font-size: 0.6rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .vs-status {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.86rem;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .vs-status .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      background: #ff7b8c;
+      box-shadow: 0 0 8px rgba(255,123,140,0.6);
+      vertical-align: middle;
+    }
+    .vs-status.connecting .dot { background: #ffd866; box-shadow: 0 0 8px rgba(255,216,102,0.7); animation: blink 1s infinite; }
+    .vs-status.connected .dot { background: #83f8be; box-shadow: 0 0 10px rgba(131,248,190,0.8); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+    .codename-input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-align: center;
+      border-radius: 14px;
+      border: 1px solid rgba(94,246,255,0.3);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      text-transform: uppercase;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .codename-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(94,246,255,0.18);
+    }
+
+    .vs-room-card {
+      padding: 14px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, rgba(94,246,255,0.12), rgba(193,163,255,0.06));
+      border: 1px solid rgba(94,246,255,0.25);
+      text-align: center;
+    }
+    .vs-room-code {
+      font-size: 1.6rem;
+      font-weight: 900;
+      letter-spacing: 0.3em;
+      margin: 6px 0;
+      color: var(--accent);
+      text-shadow: 0 0 18px rgba(94,246,255,0.4);
+    }
+    .vs-room-hint { font-size: 0.82rem; color: var(--muted); }
+
+    /* VS-mode HUD overlay (head-to-head) */
+    .vs-hud {
+      position: fixed;
+      top: var(--safe-top);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 4;
+      display: none;
+      width: min(94vw, 460px);
+      pointer-events: none;
+    }
+    .vs-hud.show { display: block; }
+    .vs-hud .vs-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 18px;
+      background: rgba(8,14,28,0.7);
+      border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(12px);
+    }
+    .vs-hud .vs-side {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .vs-hud .vs-side.right { align-items: flex-end; }
+    .vs-hud .vs-name {
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .vs-hud .vs-bar {
+      height: 8px;
+      width: 100%;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.45);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .vs-hud .vs-bar .fill {
+      height: 100%;
+      transition: width 0.18s ease;
+    }
+    .vs-hud .vs-side.left .vs-bar .fill { background: linear-gradient(90deg, #5ef6ff, #83f8be); }
+    .vs-hud .vs-side.right .vs-bar .fill { background: linear-gradient(90deg, #ff7b8c, #ffd66a); }
+    .vs-hud .vs-mid {
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      font-size: 0.86rem;
+      color: var(--accent-2);
+      padding: 0 6px;
+    }
+    .vs-hud .vs-score {
+      font-size: 0.74rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* "GO!" countdown banner */
+    .countdown {
+      position: fixed;
+      inset: 0;
+      z-index: 9;
+      display: none;
+      pointer-events: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .countdown.show { display: flex; }
+    .countdown .num {
+      font-size: clamp(5rem, 28vw, 14rem);
+      font-weight: 900;
+      background: linear-gradient(135deg, #fff8a8, #5ef6ff 50%, #c1a3ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 8px 30px rgba(94,246,255,0.5));
+      animation: pop 0.7s ease both;
+    }
+    @keyframes pop {
+      0% { transform: scale(0.4); opacity: 0; }
+      30% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Joystick mode (always-on) */
+    .joy.persistent {
+      display: block;
+      pointer-events: auto;
+      bottom: calc(var(--safe-bottom) + 130px);
+      left: calc(var(--safe-left) + 20px);
+      top: auto;
+      right: auto;
+      opacity: 0.85;
+    }
+
+    /* Sensitivity preset chips */
+    .preset-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .chip {
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      min-height: 36px;
+      transition: all 0.15s ease;
+    }
+    .chip.active {
+      background: linear-gradient(135deg, rgba(94,246,255,0.25), rgba(193,163,255,0.18));
+      border-color: rgba(94,246,255,0.45);
+      color: var(--text);
+    }
+
+    /* Install prompt */
+    .install-cta {
+      display: none;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(94,246,255,0.18), rgba(193,163,255,0.12));
+      border: 1px solid rgba(94,246,255,0.28);
+      font-size: 0.86rem;
+      color: var(--text);
+      align-items: center;
+      gap: 10px;
+    }
+    .install-cta.show { display: flex; }
+    .install-cta button {
+      background: linear-gradient(135deg, #c8ff8b, #5ef6ff);
+      color: #03101c;
+      padding: 8px 14px;
+      min-height: 36px;
+      font-size: 0.82rem;
+      flex: 0 0 auto;
+    }
+
+    /* Endless mode panel */
+    .panel.endless {
+      background: linear-gradient(160deg, rgba(255,122,214,0.14), rgba(94,246,255,0.08));
+      border-color: rgba(255,122,214,0.3);
+    }
+
+    /* Match result modal extra */
+    .vs-result-banner {
+      text-align: center;
+      padding: 10px;
+      border-radius: 14px;
+      font-weight: 900;
+      font-size: 1.4rem;
+      letter-spacing: 0.18em;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+    .vs-result-banner.win {
+      background: linear-gradient(135deg, rgba(131,248,190,0.25), rgba(94,246,255,0.15));
+      color: #b4ffd9;
+      border: 1px solid rgba(131,248,190,0.4);
+    }
+    .vs-result-banner.lose {
+      background: linear-gradient(135deg, rgba(255,123,140,0.2), rgba(193,163,255,0.12));
+      color: #ffc0c8;
+      border: 1px solid rgba(255,123,140,0.4);
+    }
+    .vs-result-banner.draw {
+      background: linear-gradient(135deg, rgba(255,216,102,0.22), rgba(193,163,255,0.12));
+      color: #ffeab4;
+      border: 1px solid rgba(255,216,102,0.4);
+    }
   </style>
 </head>
 <body>
@@ -935,13 +1225,38 @@
       <div class="title-block">
         <div class="eyebrow">Gyro Arcade · Ascension</div>
         <h1>Aether Drift</h1>
-        <p class="lead">端末を傾けて宇宙を駆け抜けろ。装備を集め、強化し、5つのステージを征服せよ。</p>
+        <p class="lead">端末を傾けて宇宙を駆け抜けろ。3つのモードと、合言葉でフレンド対戦が遊べるシューターアーケード。</p>
+      </div>
+
+      <div class="install-cta" id="installCta">
+        <div style="flex:1;">📲 ホーム画面に追加してアプリ風に遊ぶ</div>
+        <button id="btn-install">追加</button>
       </div>
 
       <div class="panel">
-        <h3>進行状況 <span class="pill" id="progress-pill">STAGE 1 / 5</span></h3>
-        <div id="progress-summary" style="font-size:0.92rem; color:var(--muted); line-height:1.55;"></div>
-        <div class="btn-row" style="margin-top:12px;">
+        <h3>プレイモード <span class="pill" id="progress-pill">STAGE 1 / 5</span></h3>
+        <div class="mode-grid" style="margin-bottom:10px;">
+          <div class="mode-tile" id="mode-story">
+            <div class="mt-pill">STORY</div>
+            <div class="mt-ic">🌌</div>
+            <div class="mt-title">ストーリー</div>
+            <div class="mt-desc">5ステージ＋ボス。クリアで装備解放。</div>
+          </div>
+          <div class="mode-tile" id="mode-endless">
+            <div class="mt-pill">ENDLESS</div>
+            <div class="mt-ic">♾️</div>
+            <div class="mt-title">無限ラン</div>
+            <div class="mt-desc">徐々に加速。ベストスコアに挑戦。</div>
+          </div>
+          <div class="mode-tile hot full" id="mode-vs">
+            <div class="mt-pill">FRIEND VS</div>
+            <div class="mt-ic">⚔️</div>
+            <div class="mt-title">合言葉で対戦</div>
+            <div class="mt-desc">2台のスマホで1対1。同じ合言葉を入れて即マッチ。</div>
+          </div>
+        </div>
+        <div id="progress-summary" style="font-size:0.86rem; color:var(--muted); line-height:1.5;"></div>
+        <div class="btn-row" style="margin-top:10px;">
           <button id="btn-quickplay">⚡ クイックプレイ</button>
           <button id="btn-continue" class="secondary">▶ 続きから</button>
         </div>
@@ -957,8 +1272,14 @@
       </div>
 
       <div class="panel">
-        <h3>設定</h3>
-        <div class="row">
+        <h3>操作 <span class="pill">CONTROLS</span></h3>
+        <div style="font-size:0.84rem; color:var(--muted); margin-bottom:6px;">操作プリセット</div>
+        <div class="preset-row" id="presetRow">
+          <button class="chip" data-preset="easy">かんたん</button>
+          <button class="chip active" data-preset="normal">標準</button>
+          <button class="chip" data-preset="hard">シビア</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
           <label for="sensSlider">ジャイロ感度</label>
           <input id="sensSlider" type="range" min="0.5" max="2.0" step="0.05" value="1.0">
           <span class="v" id="sensVal">1.00x</span>
@@ -969,6 +1290,15 @@
           <span class="v" id="deadVal">0.05</span>
         </div>
         <div class="row">
+          <label for="ctrlSelect">操作方式</label>
+          <select id="ctrlSelect" class="chip" style="flex:2; padding:8px; min-height:36px;">
+            <option value="auto">自動（ジャイロ優先）</option>
+            <option value="gyro">ジャイロのみ</option>
+            <option value="touch">タッチドラッグ</option>
+            <option value="joystick">画面ジョイスティック</option>
+          </select>
+        </div>
+        <div class="row">
           <label>サウンド</label>
           <button id="btn-mute" class="secondary" style="flex:0 0 auto; min-height:36px; padding:8px 14px;">🔊 ON</button>
         </div>
@@ -976,8 +1306,12 @@
           <label>振動</label>
           <button id="btn-vib" class="secondary" style="flex:0 0 auto; min-height:36px; padding:8px 14px;">📳 ON</button>
         </div>
-        <p style="font-size:0.82rem; color:var(--dim); margin: 6px 0 0; line-height:1.5;">
-          iOS の場合、初回プレイ時にモーション許可ダイアログが出ます。許可すると傾けて操作できます。
+        <div class="row">
+          <label>自動キャリブ</label>
+          <button id="btn-autocal" class="secondary" style="flex:0 0 auto; min-height:36px; padding:8px 14px;">🎯 ON</button>
+        </div>
+        <p style="font-size:0.78rem; color:var(--dim); margin: 6px 0 0; line-height:1.5;">
+          iOS の場合、初回プレイ時にモーション許可ダイアログが出ます。許可しないとタッチ操作になります。
         </p>
       </div>
 
@@ -987,14 +1321,15 @@
         <div class="tut-step"><b>② 弾は自動射撃</b> — 当てるだけで敵を破壊。コア✦が稼げます。</div>
         <div class="tut-step"><b>③ ニアミスで FLOW</b> — ギリギリ回避と連続撃破で倍率UP！100%でOVERDRIVE発動。</div>
         <div class="tut-step"><b>④ 強化&装備</b> — ✦コアでガチャ、★スターダストで装備強化。</div>
-        <div class="tut-step"><b>⑤ ステージ攻略</b> — クリアで次ステージ解放。最終ステージにはボスが待つ。</div>
+        <div class="tut-step"><b>⑤ 対戦</b> — 友達と同じ合言葉を入れると即マッチ。先に相手のHPを削った方が勝ち！</div>
       </div>
 
       <div class="tabbar">
-        <button class="tab-btn active" data-tab="home"><span class="ti">🚀</span>ホーム</button>
-        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
-        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
-        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+        <button class="tab-btn active" data-tab="home"><span class="ti">🚀</span><span class="tlabel">ホーム</span></button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span><span class="tlabel">ステージ</span></button>
+        <button class="tab-btn" data-tab="vs"><span class="ti">⚔️</span><span class="tlabel">対戦</span></button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span><span class="tlabel">装備</span></button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span><span class="tlabel">ガチャ</span></button>
       </div>
     </div>
   </div>
@@ -1013,11 +1348,79 @@
         <p class="lead" style="font-size:0.9rem;">クリアで次が解放。星3達成で追加報酬。</p>
       </div>
       <div class="stage-list" id="stageList"></div>
+      <div class="panel endless">
+        <h3>♾️ 無限ラン <span class="pill">ENDLESS</span></h3>
+        <p style="color:var(--muted); font-size:0.86rem; line-height:1.55; margin: 0 0 10px;">
+          時間と共に難易度が上がり続ける。1分ごとに新ウェーブ。生存時間とスコアでベストを目指せ。
+        </p>
+        <div style="font-size:0.86rem; color:var(--muted); margin-bottom:8px;">
+          ベスト: <b id="endless-best">0</b> ・ 最長生存: <b id="endless-time">0.0s</b>
+        </div>
+        <button id="btn-endless">♾️ 無限ラン開始</button>
+      </div>
       <div class="tabbar">
-        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span>ホーム</button>
-        <button class="tab-btn active" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
-        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
-        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span><span class="tlabel">ホーム</span></button>
+        <button class="tab-btn active" data-tab="stages"><span class="ti">🌌</span><span class="tlabel">ステージ</span></button>
+        <button class="tab-btn" data-tab="vs"><span class="ti">⚔️</span><span class="tlabel">対戦</span></button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span><span class="tlabel">装備</span></button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span><span class="tlabel">ガチャ</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== VS / FRIEND BATTLE ===================== -->
+  <div id="screen-vs" class="screen hidden">
+    <div class="screen-inner">
+      <div class="topbar">
+        <div class="currency"><div class="ico core">✦</div><div class="val" id="cur-core-v">0</div></div>
+        <div class="currency"><div class="ico gem">◆</div><div class="val" id="cur-gem-v">0</div></div>
+        <div class="currency"><div class="ico dust">★</div><div class="val" id="cur-dust-v">0</div></div>
+      </div>
+      <div class="title-block">
+        <div class="eyebrow">Friend VS · Realtime</div>
+        <h2>合言葉で対戦</h2>
+        <p class="lead" style="font-size:0.9rem;">2台のスマホで同じ合言葉を入力すると即マッチ。<br>WebRTC直接接続なのでサーバー不要・高速。</p>
+      </div>
+
+      <div class="panel">
+        <h3>あなた <span class="pill">PILOT</span></h3>
+        <div class="row">
+          <label for="vsName">名前</label>
+          <input id="vsName" class="chip" style="flex:2; padding:10px; min-height:38px; text-align:left; letter-spacing:0.04em;" maxlength="12" placeholder="Pilot">
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>合言葉 <span class="pill" id="vsConnPill">OFFLINE</span></h3>
+        <p style="color:var(--muted); font-size:0.86rem; line-height:1.55; margin: 0 0 8px;">
+          英数4〜12文字でルームの合言葉を決めよう。両方が同じ合言葉を入力すると接続されます。
+        </p>
+        <input id="vsCodeInput" class="codename-input" maxlength="12" placeholder="ROOM-CODE" autocomplete="off" autocapitalize="characters">
+        <div class="btn-row" style="margin-top:10px;">
+          <button id="btn-vs-connect">⚔️ 接続して対戦</button>
+          <button id="btn-vs-random" class="secondary">🎲 ランダム合言葉</button>
+        </div>
+        <div class="vs-status" id="vsStatus" style="margin-top:10px;">
+          <span class="dot"></span><span id="vsStatusText">未接続</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>ルール <span class="pill">90s BO1</span></h3>
+        <ul style="margin:0; padding-left:18px; font-size:0.88rem; line-height:1.7; color:var(--muted);">
+          <li>同じ障害物を両端末で表示。先に相手のHPを 0 にしたら<b style="color:var(--good)">勝利</b>。</li>
+          <li>90秒経過時はHPが多い方の勝ち（同点はスコアで判定）。</li>
+          <li>装備はストーリーで集めたものがそのまま反映されます。</li>
+          <li>ニアミスやコイン取得で <b style="color:var(--accent)">攻撃チャージ</b> が貯まり、<b>OVERDRIVE</b>で相手にダメージが飛びます。</li>
+        </ul>
+      </div>
+
+      <div class="tabbar">
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span><span class="tlabel">ホーム</span></button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span><span class="tlabel">ステージ</span></button>
+        <button class="tab-btn active" data-tab="vs"><span class="ti">⚔️</span><span class="tlabel">対戦</span></button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span><span class="tlabel">装備</span></button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span><span class="tlabel">ガチャ</span></button>
       </div>
     </div>
   </div>
@@ -1050,10 +1453,11 @@
         <div class="item-grid" id="itemGrid"></div>
       </div>
       <div class="tabbar">
-        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span>ホーム</button>
-        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
-        <button class="tab-btn active" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
-        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span><span class="tlabel">ホーム</span></button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span><span class="tlabel">ステージ</span></button>
+        <button class="tab-btn" data-tab="vs"><span class="ti">⚔️</span><span class="tlabel">対戦</span></button>
+        <button class="tab-btn active" data-tab="inventory"><span class="ti">⚙️</span><span class="tlabel">装備</span></button>
+        <button class="tab-btn" data-tab="gacha"><span class="ti">🎰</span><span class="tlabel">ガチャ</span></button>
       </div>
     </div>
   </div>
@@ -1108,10 +1512,11 @@
         </div>
       </div>
       <div class="tabbar">
-        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span>ホーム</button>
-        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span>ステージ</button>
-        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span>装備</button>
-        <button class="tab-btn active" data-tab="gacha"><span class="ti">🎰</span>ガチャ</button>
+        <button class="tab-btn" data-tab="home"><span class="ti">🚀</span><span class="tlabel">ホーム</span></button>
+        <button class="tab-btn" data-tab="stages"><span class="ti">🌌</span><span class="tlabel">ステージ</span></button>
+        <button class="tab-btn" data-tab="vs"><span class="ti">⚔️</span><span class="tlabel">対戦</span></button>
+        <button class="tab-btn" data-tab="inventory"><span class="ti">⚙️</span><span class="tlabel">装備</span></button>
+        <button class="tab-btn active" data-tab="gacha"><span class="ti">🎰</span><span class="tlabel">ガチャ</span></button>
       </div>
     </div>
   </div>
@@ -1160,9 +1565,30 @@
   <div class="boss-banner" id="bossBanner">⚠ BOSS APPROACHING ⚠</div>
   <div class="joy" id="joy"><div class="nob" id="joyNob"></div></div>
 
+  <!-- VS HUD overlay (head-to-head HP bars) -->
+  <div class="vs-hud" id="vsHud">
+    <div class="vs-row">
+      <div class="vs-side left">
+        <div class="vs-name" id="vsLeftName">あなた</div>
+        <div class="vs-bar"><div class="fill" id="vsLeftFill" style="width:100%"></div></div>
+        <div class="vs-score" id="vsLeftScore">0</div>
+      </div>
+      <div class="vs-mid" id="vsMid">VS</div>
+      <div class="vs-side right">
+        <div class="vs-name" id="vsRightName">相手</div>
+        <div class="vs-bar"><div class="fill" id="vsRightFill" style="width:100%"></div></div>
+        <div class="vs-score" id="vsRightScore">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Countdown overlay (3,2,1,GO) -->
+  <div class="countdown" id="countdown"><div class="num" id="countdownNum">3</div></div>
+
   <!-- ===================== Result modal ===================== -->
   <div class="modal-bg hidden" id="resultModal">
     <div class="modal" style="position:relative;">
+      <div class="vs-result-banner" id="resultVsBanner" style="display:none;"></div>
       <div class="eyebrow" id="resultEyebrow" style="text-align:center;">Mission Result</div>
       <h2 id="resultTitle" style="text-align:center;">Mission Clear</h2>
       <p class="lead" id="resultLead" style="text-align:center; font-size:0.9rem; margin: 6px 0 12px;"></p>
@@ -1172,7 +1598,7 @@
         <div class="result-box"><span class="small">Best</span><strong id="resultBest">0</strong></div>
         <div class="result-box"><span class="small">Stars</span><strong id="resultStars">★☆☆</strong></div>
       </div>
-      <h3 style="font-size:0.95rem;">獲得報酬</h3>
+      <h3 style="font-size:0.95rem;" id="resultRewardHead">獲得報酬</h3>
       <div class="reward-list" id="rewardList"></div>
       <div class="btn-row" style="margin-top:14px;">
         <button id="resultRetryBtn">もう一度</button>
@@ -1227,7 +1653,7 @@
     /* ============================================================
        PERSISTENCE
        ============================================================ */
-    const STORAGE_KEY = "aether-drift-ascension-v1";
+    const STORAGE_KEY = "aether-drift-ascension-v2";
     const defaultSave = () => ({
       currencies: { core: 500, gem: 30, dust: 0 },
       stageStars: [0, 0, 0, 0, 0],   // 0..3 stars per stage
@@ -1237,10 +1663,23 @@
       inventory: [],                 // [{id, type, rarity, level, name, ...}]
       equipped: { weapon: null, shield: null, engine: null, core: null },
       pity: 0,
-      settings: { sens: 1.0, dead: 0.05, mute: false, vibrate: true },
+      settings: {
+        sens: 1.0,
+        dead: 0.05,
+        mute: false,
+        vibrate: true,
+        ctrl: "auto",          // auto | gyro | touch | joystick
+        autoCalibrate: true,   // auto recenter when posture stable
+        preset: "normal"       // easy | normal | hard
+      },
       itemSeq: 1,
       tutorialDone: false,
-      bestScore: 0
+      bestScore: 0,
+      endlessBest: 0,
+      endlessBestTime: 0,
+      vsName: "Pilot",
+      vsWins: 0,
+      vsLosses: 0
     });
 
     let save = defaultSave();
@@ -1438,6 +1877,37 @@
       }
     ];
 
+    // Special pseudo-stages used for Endless and VS modes (not in stage select grid)
+    const ENDLESS_STAGE = {
+      index: 99,
+      name: "Endless Drift",
+      short: "Endless",
+      duration: 99999,
+      difficulty: 1.0,
+      colors: ["#08111c", "#11203c", "#27184c"],
+      patterns: ["lane", "slalom", "rings", "arc", "mines", "beam", "droneV", "doubleLane"],
+      cooldown: [1.2, 1.7],
+      bossAt: null,
+      rewardCore: [0, 0, 0],
+      rewardGem: [0, 0, 0],
+      starThresholds: [99999, 99999, 99999]
+    };
+
+    const VS_STAGE = {
+      index: 100,
+      name: "Friend VS Arena",
+      short: "VS Arena",
+      duration: 90,
+      difficulty: 1.2,
+      colors: ["#0a1024", "#1a1442", "#3a1a5e"],
+      patterns: ["lane", "slalom", "rings", "arc", "mines", "droneV"],
+      cooldown: [1.15, 1.6],
+      bossAt: null,
+      rewardCore: [0, 0, 0],
+      rewardGem: [0, 0, 0],
+      starThresholds: [99999, 99999, 99999]
+    };
+
     /* ============================================================
        PLAYER STATS — derived from equipment
        ============================================================ */
@@ -1535,13 +2005,14 @@
     const screens = {
       home: $("screen-home"),
       stages: $("screen-stages"),
+      vs: $("screen-vs"),
       inventory: $("screen-inventory"),
       gacha: $("screen-gacha")
     };
 
     function showScreen(name) {
       Object.entries(screens).forEach(([k, el]) => {
-        el.classList.toggle("hidden", k !== name);
+        if (el) el.classList.toggle("hidden", k !== name);
       });
       document.querySelectorAll(".tab-btn").forEach(b => {
         b.classList.toggle("active", b.dataset.tab === name);
@@ -1549,6 +2020,7 @@
       // refresh
       if (name === "home") refreshHome();
       else if (name === "stages") refreshStageList();
+      else if (name === "vs") refreshVs();
       else if (name === "inventory") refreshInventory();
       else if (name === "gacha") refreshGacha();
       window.scrollTo(0, 0);
@@ -1564,7 +2036,8 @@
        ============================================================ */
     function refreshCurrencies() {
       const ids = ["cur-core","cur-gem","cur-dust","cur-core-s","cur-gem-s","cur-dust-s",
-                   "cur-core-i","cur-gem-i","cur-dust-i","cur-core-g","cur-gem-g","cur-dust-g"];
+                   "cur-core-i","cur-gem-i","cur-dust-i","cur-core-g","cur-gem-g","cur-dust-g",
+                   "cur-core-v","cur-gem-v","cur-dust-v"];
       ids.forEach(id => {
         const el = $(id);
         if (!el) return;
@@ -1619,13 +2092,21 @@
         <div>クリア済ステージ: <b>${cleared} / 5</b></div>
         <div>累計スター: <b>★ ${totalStars} / 15</b></div>
         <div>ベストスコア: <b>${fmt(save.bestScore)}</b></div>
+        <div>無限ベスト: <b>${fmt(save.endlessBest || 0)}</b> (${(save.endlessBestTime||0).toFixed(1)}s)</div>
+        <div>VS戦績: <b style="color:var(--good)">${save.vsWins||0}勝</b> / <b style="color:var(--danger)">${save.vsLosses||0}敗</b></div>
       `;
       $("btn-mute").textContent = save.settings.mute ? "🔇 OFF" : "🔊 ON";
       $("btn-vib").textContent = save.settings.vibrate ? "📳 ON" : "📵 OFF";
+      const autocalBtn = $("btn-autocal"); if (autocalBtn) autocalBtn.textContent = save.settings.autoCalibrate ? "🎯 ON" : "🎯 OFF";
+      const ctrlSel = $("ctrlSelect"); if (ctrlSel) ctrlSel.value = save.settings.ctrl || "auto";
       $("sensSlider").value = save.settings.sens;
       $("sensVal").textContent = `${Number(save.settings.sens).toFixed(2)}x`;
       $("deadSlider").value = save.settings.dead;
       $("deadVal").textContent = Number(save.settings.dead).toFixed(2);
+      // Preset chips
+      document.querySelectorAll("#presetRow .chip").forEach(c => {
+        c.classList.toggle("active", c.dataset.preset === (save.settings.preset || "normal"));
+      });
     }
 
     /* ============================================================
@@ -1633,6 +2114,9 @@
        ============================================================ */
     function refreshStageList() {
       refreshCurrencies();
+      // Endless info
+      const eb = $("endless-best"); if (eb) eb.textContent = fmt(save.endlessBest || 0);
+      const et = $("endless-time"); if (et) et.textContent = `${(save.endlessBestTime||0).toFixed(1)}s`;
       const list = $("stageList");
       list.innerHTML = "";
       STAGES.forEach((stage, i) => {
@@ -1953,9 +2437,16 @@
     /* ============================================================
        SETTINGS bindings
        ============================================================ */
+    const PRESETS = {
+      easy:   { sens: 1.4, dead: 0.08 },
+      normal: { sens: 1.0, dead: 0.05 },
+      hard:   { sens: 0.7, dead: 0.02 }
+    };
+
     $("sensSlider").addEventListener("input", (e) => {
       save.settings.sens = Number(e.target.value);
       $("sensVal").textContent = `${save.settings.sens.toFixed(2)}x`;
+      // user override → set preset to "normal" (custom)
       persist();
     });
     $("deadSlider").addEventListener("input", (e) => {
@@ -1974,6 +2465,33 @@
       $("btn-vib").textContent = save.settings.vibrate ? "📳 ON" : "📵 OFF";
     });
 
+    const autocalBtn = $("btn-autocal");
+    if (autocalBtn) autocalBtn.addEventListener("click", () => {
+      save.settings.autoCalibrate = !save.settings.autoCalibrate;
+      autocalBtn.textContent = save.settings.autoCalibrate ? "🎯 ON" : "🎯 OFF";
+      persist();
+    });
+
+    const ctrlSel = $("ctrlSelect");
+    if (ctrlSel) ctrlSel.addEventListener("change", (e) => {
+      save.settings.ctrl = e.target.value;
+      persist();
+      showToast(`操作方式: ${ctrlSel.options[ctrlSel.selectedIndex].text}`, 1.4);
+    });
+
+    document.querySelectorAll("#presetRow .chip").forEach(c => {
+      c.addEventListener("click", () => {
+        const p = c.dataset.preset;
+        const cfg = PRESETS[p] || PRESETS.normal;
+        save.settings.preset = p;
+        save.settings.sens = cfg.sens;
+        save.settings.dead = cfg.dead;
+        persist();
+        refreshHome();
+        showToast(`プリセット: ${c.textContent.trim()}`, 1.2);
+      });
+    });
+
     $("btn-quickplay").addEventListener("click", () => {
       // Start unlocked stage that has fewest stars (or last)
       let target = save.unlockedStage - 1;
@@ -1985,6 +2503,12 @@
     $("btn-continue").addEventListener("click", () => {
       startMission(save.lastStage - 1);
     });
+
+    // Mode tiles on home
+    const modeStory = $("mode-story"); if (modeStory) modeStory.addEventListener("click", () => showScreen("stages"));
+    const modeEndless = $("mode-endless"); if (modeEndless) modeEndless.addEventListener("click", () => startEndless());
+    const modeVs = $("mode-vs"); if (modeVs) modeVs.addEventListener("click", () => showScreen("vs"));
+    const btnEndless = $("btn-endless"); if (btnEndless) btnEndless.addEventListener("click", () => startEndless());
 
     /* ============================================================
        AUDIO
@@ -2066,7 +2590,7 @@
 
     const game = {
       mode: "gyro",
-      phase: "menu",        // menu | running | paused | result
+      phase: "menu",        // menu | running | paused | result | countdown
       running: false,
       stageIndex: 0,
       stage: null,
@@ -2087,7 +2611,25 @@
       coresGained: 0,
       ringsHit: 0,
       maxFlow: 0,
-      sensorWatch: 0
+      sensorWatch: 0,
+      // mode flags
+      kind: "story",        // story | endless | vs
+      endlessWave: 1,
+      seed: 1,              // shared RNG seed (used in vs)
+      countdownT: 0,        // countdown remaining seconds
+      // VS state
+      vsActive: false,
+      vsRole: null,         // host | guest
+      vsPeerHp: 5,
+      vsPeerMaxHp: 5,
+      vsPeerScore: 0,
+      vsPeerX: 0.5,
+      vsPeerY: 0.78,
+      vsPeerCharge: 0,
+      vsPeerOver: 0,
+      vsPeerName: "相手",
+      vsLastSent: 0,
+      vsEndedReason: null
     };
 
     const input = {
@@ -2126,8 +2668,26 @@
       pickups.length = 0;
       particles.length = 0;
       shockwaves.length = 0;
+      peerBullets.length = 0;
       boss = null;
     }
+
+    // ===== Seeded RNG (mulberry32) — used so that VS clients see identical hazards =====
+    function mulberry32(a) {
+      return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = a;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+    let seededRand = Math.random;          // overridden during VS so spawn patterns sync
+    const srand = (a, b) => a + seededRand() * (b - a);
+    const spick = (arr) => arr[(seededRand() * arr.length) | 0];
+
+    // Peer bullets (rendered for VS opponent)
+    const peerBullets = [];
 
     function resize() {
       W = window.innerWidth;
@@ -2171,12 +2731,21 @@
       haptic(20);
     }
 
-    /* Touch (drag-anywhere joystick) */
+    /* Touch input — supports drag-anywhere joystick or persistent joystick */
     const joy = $("joy"), joyNob = $("joyNob");
-    function showJoy(x, y) {
+    function showJoy(x, y, persistent = false) {
       joy.style.left = (x - 55) + "px";
       joy.style.top = (y - 55) + "px";
+      joy.style.bottom = "auto";
+      joy.style.right = "auto";
       joy.classList.add("show");
+      joy.classList.toggle("persistent", !!persistent);
+      joyNob.style.left = "50%";
+      joyNob.style.top = "50%";
+    }
+    function placePersistentJoy() {
+      // Anchored at lower-left for thumb reach
+      joy.classList.add("show", "persistent");
       joyNob.style.left = "50%";
       joyNob.style.top = "50%";
     }
@@ -2188,28 +2757,59 @@
       joyNob.style.left = `calc(50% + ${nx}px)`;
       joyNob.style.top = `calc(50% + ${ny}px)`;
     }
-    function hideJoy() { joy.classList.remove("show"); }
+    function hideJoy() { joy.classList.remove("show", "persistent"); }
+
+    function getEffectiveCtrl() {
+      // Determine effective control mode given player setting and sensor availability.
+      const pref = save.settings.ctrl || "auto";
+      if (pref === "gyro") return input.sensorSamples > 0 ? "gyro" : "touch";
+      if (pref === "touch") return "touch";
+      if (pref === "joystick") return "joystick";
+      // auto
+      return input.sensorSamples > 0 ? "gyro" : "touch";
+    }
 
     canvas.addEventListener("pointerdown", (e) => {
-      if (game.phase !== "running" && game.phase !== "paused") return;
-      if (game.mode === "touch" || input.sensorSamples === 0) {
+      if (game.phase !== "running" && game.phase !== "paused" && game.phase !== "countdown") return;
+      const m = game.mode;
+      if (m === "touch") {
         input.touchActive = true;
         input.touchStartX = e.clientX;
         input.touchStartY = e.clientY;
         input.touchX = e.clientX;
         input.touchY = e.clientY;
+        // Drag-anywhere absolute follow (more intuitive for casual)
+        input.touchAbsolute = true;
         showJoy(e.clientX, e.clientY);
+      } else if (m === "joystick") {
+        // joystick is persistent at lower-left; only register touches inside its area
+        const rect = joy.getBoundingClientRect();
+        const inside = e.clientX >= rect.left - 12 && e.clientX <= rect.right + 12
+                    && e.clientY >= rect.top - 12 && e.clientY <= rect.bottom + 12;
+        if (!inside) return;
+        input.touchActive = true;
+        input.touchAbsolute = false;
+        input.touchStartX = rect.left + rect.width / 2;
+        input.touchStartY = rect.top + rect.height / 2;
+        input.touchX = e.clientX;
+        input.touchY = e.clientY;
+        moveJoy(e.clientX - input.touchStartX, e.clientY - input.touchStartY);
       }
     }, { passive: true });
     canvas.addEventListener("pointermove", (e) => {
       if (!input.touchActive) return;
       input.touchX = e.clientX;
       input.touchY = e.clientY;
-      moveJoy(e.clientX - input.touchStartX, e.clientY - input.touchStartY);
+      if (game.mode === "joystick") {
+        moveJoy(e.clientX - input.touchStartX, e.clientY - input.touchStartY);
+      } else {
+        moveJoy(e.clientX - input.touchStartX, e.clientY - input.touchStartY);
+      }
     }, { passive: true });
     function endTouch() {
       input.touchActive = false;
-      hideJoy();
+      if (game.mode !== "joystick") hideJoy();
+      else { joyNob.style.left = "50%"; joyNob.style.top = "50%"; }
     }
     canvas.addEventListener("pointerup", endTouch, { passive: true });
     canvas.addEventListener("pointercancel", endTouch, { passive: true });
@@ -2220,9 +2820,6 @@
     function resetRun() {
       stats = computeStats();
       clearEntities();
-      player.maxHp = 4 + (stats.hp - 4); // hp diff
-      // Actually compute: baseHp + bonus from shield (already inside stats.hp)
-      // stats.hp includes baseHp 4
       player.maxHp = stats.hp;
       player.hp = player.maxHp;
       player.x = W * 0.5;
@@ -2252,54 +2849,416 @@
       game.coresGained = 0;
       game.ringsHit = 0;
       game.maxFlow = 1;
+      game.diffMul = 1;
+      game.endlessWave = 1;
       game.sensorWatch = game.mode === "gyro" ? 1.4 : 0;
       timeScale = 1;
       timeScaleTimer = 0;
       input.touchActive = false;
       input.targetX = 0.5;
       input.targetY = 0.78;
+      // VS reset
+      game.vsActive = false;
+      game.vsPeerHp = 5; game.vsPeerMaxHp = 5; game.vsPeerScore = 0;
+      game.vsPeerX = 0.5; game.vsPeerY = 0.18; game.vsPeerCharge = 0; game.vsPeerOver = 0;
+      game.vsLastSent = 0;
+      game.vsEndedReason = null;
+      // Seed: by default, use Math.random — overridden per-mission
+      seededRand = Math.random;
     }
 
-    async function startMission(stageIndex) {
+    async function startMission(stageIndex, opts = {}) {
       await unlockAudio();
-      const granted = await requestMotionAccess();
-      game.mode = granted ? "gyro" : "touch";
+      // Decide control mode based on user preference
+      const pref = save.settings.ctrl || "auto";
+      if (pref === "gyro" || pref === "auto") {
+        const granted = await requestMotionAccess();
+        if (granted) {
+          game.mode = "gyro";
+        } else {
+          game.mode = pref === "gyro" ? "touch" : "touch";
+        }
+      } else {
+        game.mode = pref; // touch | joystick
+      }
 
-      game.stageIndex = stageIndex;
-      game.stage = STAGES[stageIndex];
-      save.lastStage = stageIndex + 1;
-      persist();
+      game.kind = opts.kind || "story";
+
+      if (game.kind === "story") {
+        game.stageIndex = stageIndex;
+        game.stage = STAGES[stageIndex];
+        save.lastStage = stageIndex + 1;
+        persist();
+        seededRand = Math.random;
+      } else if (game.kind === "endless") {
+        game.stageIndex = 0;
+        game.stage = Object.assign({}, ENDLESS_STAGE);
+        seededRand = Math.random;
+      } else if (game.kind === "vs") {
+        game.stageIndex = 0;
+        game.stage = Object.assign({}, VS_STAGE);
+        // Use shared deterministic seed from match start
+        seededRand = mulberry32((opts.seed | 0) || 1);
+        game.seed = (opts.seed | 0) || 1;
+        game.vsActive = true;
+      }
 
       resetRun();
-      game.phase = "running";
-      game.running = true;
-
-      // Hide screens, show HUD
+      // Display screen / HUD setup (override mode after reset)
+      // Re-apply mode (resetRun cleared touch state)
       Object.values(screens).forEach(s => s.classList.add("hidden"));
       $("hud").classList.remove("hidden");
       $("resultModal").classList.add("hidden");
       $("bossBar").classList.remove("show");
       $("bossBanner").classList.remove("show");
 
+      // Show persistent joystick if needed
+      hideJoy();
+      if (game.mode === "joystick") placePersistentJoy();
+
+      // VS HUD on/off
+      const vsHud = $("vsHud");
+      if (vsHud) vsHud.classList.toggle("show", game.kind === "vs");
+
       calibrateMotion();
+
+      if (game.kind === "vs") {
+        game.phase = "countdown";
+        game.countdownT = 3.0;
+        showCountdown();
+        sfx("sector");
+      } else {
+        game.phase = "running";
+        game.running = true;
+        showToast(`${game.stage.name}`, 2.4);
+        sfx("sector");
+      }
       updateHud();
-      showToast(`${game.stage.name}`, 2.4);
-      sfx("sector");
     }
+
+    function startEndless() {
+      startMission(0, { kind: "endless" });
+    }
+
+    function showCountdown() {
+      const el = $("countdown");
+      const num = $("countdownNum");
+      el.classList.add("show");
+      num.textContent = "3";
+    }
+
+    /* ============================================================
+       VS Networking (PeerJS over public broker)
+       Protocol:
+         hello   { name, ver }            — exchanged on connection open
+         start   { seed, hostName }       — host → guest, kicks off the match
+         state   { x, y, hp, maxHp, score, charge, over, firing }
+         hit     { dmg }                  — damage notification (overdrive landed)
+         bullet  { x, y }                 — peer-fired bullet position (rendered)
+         over    { reason: "win"|"lose" } — match end notification
+       ============================================================ */
+    const VS = (function() {
+      let peer = null;
+      let conn = null;
+      let isHost = false;
+      let myCode = "";
+      let pendingStart = null;
+      const api = {
+        connected: false,
+        status: "OFFLINE",
+        onStatus: null
+      };
+
+      function setStatus(s, txt) {
+        api.status = s;
+        const pill = $("vsConnPill");
+        const dot = document.querySelector("#vsStatus .dot");
+        const stxt = $("vsStatusText");
+        if (pill) {
+          pill.textContent = s;
+          pill.style.background = s === "MATCHED" || s === "IN-MATCH" ? "rgba(80,255,180,0.18)"
+                                : s === "CONNECTING" ? "rgba(255,210,120,0.18)"
+                                : s === "ERROR" ? "rgba(255,90,120,0.18)"
+                                : "rgba(255,255,255,0.08)";
+          pill.style.color = s === "MATCHED" || s === "IN-MATCH" ? "#7effc6"
+                           : s === "CONNECTING" ? "#ffd97a"
+                           : s === "ERROR" ? "#ffa0b3"
+                           : "var(--muted)";
+        }
+        if (dot) {
+          dot.style.background = s === "MATCHED" || s === "IN-MATCH" ? "#7effc6"
+                              : s === "CONNECTING" ? "#ffd97a"
+                              : s === "ERROR" ? "#ffa0b3"
+                              : "rgba(200,210,230,0.4)";
+        }
+        if (stxt) stxt.textContent = txt || s;
+      }
+
+      function normCode(c) {
+        return (c || "").toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+      }
+      function peerIdFromCode(code, role) {
+        return "ad-" + code + "-" + role;
+      }
+
+      function attachConn(c) {
+        conn = c;
+        c.on("open", () => {
+          api.connected = true;
+          setStatus("MATCHED", isHost ? "相手と接続！(ホスト)" : "ホストと接続！");
+          // Send hello
+          send({ t: "hello", name: (save.vsName || "Pilot").slice(0, 12), ver: 2 });
+          // Host starts the match
+          if (isHost) {
+            const seed = (Math.random() * 0x7fffffff) | 0;
+            send({ t: "start", seed, hostName: (save.vsName || "Host").slice(0, 12) });
+            setTimeout(() => {
+              setStatus("IN-MATCH", "対戦中");
+              startMission(0, { kind: "vs", seed });
+            }, 400);
+          }
+        });
+        c.on("data", onMessage);
+        c.on("close", () => {
+          api.connected = false;
+          if (game.kind === "vs" && game.phase === "running") {
+            // Treat early disconnect as our win (peer left)
+            game.vsEndedReason = "win";
+            finishRun(true);
+          }
+          setStatus("OFFLINE", "切断されました");
+        });
+        c.on("error", (err) => {
+          console.warn("conn error", err);
+          setStatus("ERROR", "接続エラー: " + (err && err.type ? err.type : "unknown"));
+        });
+      }
+
+      function send(obj) {
+        if (conn && conn.open) {
+          try { conn.send(obj); } catch(e){}
+        }
+      }
+
+      function onMessage(msg) {
+        if (!msg || typeof msg !== "object") return;
+        if (msg.t === "hello") {
+          game.vsPeerName = (msg.name || "ENEMY").slice(0, 12);
+          updateVsHud && updateVsHud();
+        } else if (msg.t === "start") {
+          // Guest receives start
+          if (!isHost) {
+            game.vsPeerName = (msg.hostName || "ENEMY").slice(0, 12);
+            setStatus("IN-MATCH", "対戦中");
+            startMission(0, { kind: "vs", seed: msg.seed | 0 });
+          }
+        } else if (msg.t === "state") {
+          game.vsPeerTargetX = clamp(msg.x, 0, 1);
+          game.vsPeerTargetY = clamp(msg.y, 0, 1);
+          if (game.vsPeerX == null) {
+            game.vsPeerX = game.vsPeerTargetX;
+            game.vsPeerY = game.vsPeerTargetY;
+          }
+          game.vsPeerHp = Math.max(0, +msg.hp || 0);
+          game.vsPeerMaxHp = +msg.maxHp || 5;
+          game.vsPeerScore = +msg.score || 0;
+          game.vsPeerCharge = +msg.charge || 0;
+          game.vsPeerOver = +msg.over || 0;
+          // Occasional muzzle bullet from peer
+          if (msg.firing && Math.random() < 0.18) {
+            const bx = clamp(game.vsPeerTargetX * W, 8, W - 8);
+            const by = clamp(game.vsPeerTargetY * H + 18, 30, H * 0.4);
+            peerBullets.push({ x: bx, y: by, life: 1.4 });
+          }
+        } else if (msg.t === "hit") {
+          // Peer reports they overdrove us → take damage
+          const dmg = clamp(+msg.dmg || 0, 0, 5);
+          if (player.invuln <= 0 && dmg > 0) {
+            player.hp = Math.max(0, player.hp - dmg);
+            player.invuln = 1.0;
+            game.shake = 14;
+            game.flash = 0.5;
+            haptic([60, 30, 60]);
+            sfx("hurt");
+          }
+        } else if (msg.t === "over") {
+          // Peer ended the match
+          if (game.kind === "vs" && game.phase === "running" && !game.vsEndedReason) {
+            const myResult = msg.reason === "win" ? "lose" : msg.reason === "lose" ? "win" : "draw";
+            game.vsEndedReason = myResult;
+            finishRun(myResult === "win");
+          }
+        }
+      }
+
+      api.connect = function(rawCode) {
+        const code = normCode(rawCode);
+        if (!code || code.length < 4) {
+          setStatus("ERROR", "合言葉は4文字以上の英数字");
+          showToast("合言葉は4文字以上の英数字で");
+          return false;
+        }
+        if (typeof window.Peer === "undefined") {
+          setStatus("ERROR", "PeerJS読み込み失敗");
+          showToast("ネットワークライブラリが読み込めません");
+          return false;
+        }
+        myCode = code;
+        api.disconnect(); // ensure clean state
+        setStatus("CONNECTING", "ホスト接続を試行中...");
+
+        // Race to be the host: try to register as host id first
+        const hostId = peerIdFromCode(code, "h");
+        const guestId = peerIdFromCode(code, "g");
+
+        let resolved = false;
+        // Try host first
+        const hostPeer = new Peer(hostId, { debug: 1 });
+        const fallbackTimer = setTimeout(() => {
+          if (!resolved) {
+            try { hostPeer.destroy(); } catch(e){}
+          }
+        }, 4500);
+
+        hostPeer.on("open", (id) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(fallbackTimer);
+          peer = hostPeer;
+          isHost = true;
+          setStatus("CONNECTING", "相手の参加を待機中... (合言葉: " + code + ")");
+          peer.on("connection", (c) => {
+            attachConn(c);
+          });
+          peer.on("error", (err) => {
+            console.warn("host peer err", err);
+            setStatus("ERROR", "ホストエラー: " + (err && err.type ? err.type : ""));
+          });
+        });
+        hostPeer.on("error", (err) => {
+          if (resolved) return;
+          // ID likely taken → become guest
+          if (err && (err.type === "unavailable-id" || err.type === "id-taken" || /taken|unavail/i.test(String(err.message || "")))) {
+            try { hostPeer.destroy(); } catch(e){}
+            resolved = true;
+            clearTimeout(fallbackTimer);
+            // Try as guest
+            isHost = false;
+            const gPeer = new Peer(guestId, { debug: 1 });
+            peer = gPeer;
+            gPeer.on("open", () => {
+              setStatus("CONNECTING", "ホストへ接続中...");
+              const c = gPeer.connect(hostId, { reliable: true });
+              attachConn(c);
+            });
+            gPeer.on("error", (e2) => {
+              console.warn("guest peer err", e2);
+              setStatus("ERROR", "接続失敗: " + (e2 && e2.type ? e2.type : ""));
+            });
+          } else {
+            console.warn("peer err", err);
+            setStatus("ERROR", "通信エラー: " + (err && err.type ? err.type : ""));
+          }
+        });
+        return true;
+      };
+
+      api.disconnect = function() {
+        try { if (conn) conn.close(); } catch(e){}
+        try { if (peer) peer.destroy(); } catch(e){}
+        conn = null; peer = null; isHost = false;
+        api.connected = false;
+        setStatus("OFFLINE", "未接続");
+      };
+
+      api.send = send;
+
+      api.randomCode = function() {
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        let s = "";
+        for (let i = 0; i < 6; i++) s += chars[(Math.random() * chars.length) | 0];
+        return s;
+      };
+
+      return api;
+    })();
+
+    function refreshVs() {
+      refreshCurrencies();
+      const nameInput = $("vsName");
+      if (nameInput) nameInput.value = save.vsName || "Pilot";
+      const codeInput = $("vsCodeInput");
+      if (codeInput && !codeInput.value) codeInput.value = "";
+      // status reset to OFFLINE if not currently connected/in-match
+      if (!VS.connected) {
+        // Soft reset of pill
+        const pill = $("vsConnPill");
+        if (pill && (pill.textContent === "MATCHED" || pill.textContent === "IN-MATCH")) {
+          // already mid-match; leave alone
+        } else {
+          // ensure visible OFFLINE
+          if (pill) pill.textContent = VS.status || "OFFLINE";
+        }
+      }
+    }
+
+    // Wire VS UI buttons
+    document.addEventListener("DOMContentLoaded", () => {});
+    (function wireVs() {
+      const nameInput = $("vsName");
+      if (nameInput) {
+        nameInput.addEventListener("input", () => {
+          save.vsName = (nameInput.value || "Pilot").slice(0, 12);
+          persist();
+        });
+      }
+      const codeInput = $("vsCodeInput");
+      if (codeInput) {
+        codeInput.addEventListener("input", () => {
+          // Force uppercase alphanum
+          const v = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+          if (v !== codeInput.value) codeInput.value = v;
+        });
+      }
+      const btnConn = $("btn-vs-connect");
+      if (btnConn) {
+        btnConn.addEventListener("click", async () => {
+          // request motion permission early on iOS so the gesture is captured
+          await unlockAudio();
+          await requestMotionAccess();
+          const code = (codeInput && codeInput.value || "").trim();
+          if (!code) { showToast("合言葉を入力してください"); return; }
+          VS.connect(code);
+        });
+      }
+      const btnRand = $("btn-vs-random");
+      if (btnRand) {
+        btnRand.addEventListener("click", () => {
+          if (codeInput) codeInput.value = VS.randomCode();
+          showToast("合言葉を生成。相手にも同じ合言葉を伝えて接続！", 2.6);
+        });
+      }
+    })();
 
     function returnToHome() {
       game.phase = "menu";
       game.running = false;
+      game.vsActive = false;
       clearEntities();
       $("hud").classList.add("hidden");
       $("resultModal").classList.add("hidden");
       $("bossBar").classList.remove("show");
       $("bossBanner").classList.remove("show");
+      const vsHud = $("vsHud"); if (vsHud) vsHud.classList.remove("show");
+      const cd = $("countdown"); if (cd) cd.classList.remove("show");
       hideJoy();
+      // Disconnect VS if connected
+      VS.disconnect();
       showScreen("home");
     }
 
     function pauseRun() {
+      if (game.kind === "vs") return; // pausing not allowed in VS
       if (game.phase === "running") {
         game.phase = "paused";
         $("pauseBtn").textContent = "RESUME";
@@ -2371,7 +3330,7 @@
     }
 
     function spawnHazard(type, x, y, opt = {}) {
-      const diff = (game.stage?.difficulty || 1);
+      const diff = (game.stage?.difficulty || 1) * (game.diffMul || 1);
       const base = {
         type, x, y,
         vx: opt.vx ?? 0,
@@ -2379,12 +3338,12 @@
         r: opt.r ?? 18,
         hp: (opt.hp ?? 2) * (1 + (diff - 1) * 0.4),
         worth: opt.worth ?? 80,
-        wobble: rand(0, TAU),
+        wobble: srand(0, TAU),
         amp: opt.amp ?? 0,
-        frequency: opt.frequency ?? rand(1.1, 2.3),
+        frequency: opt.frequency ?? srand(1.1, 2.3),
         nearMissAwarded: false,
-        rotation: rand(0, TAU),
-        spin: opt.spin ?? rand(-2.5, 2.5),
+        rotation: srand(0, TAU),
+        spin: opt.spin ?? srand(-2.5, 2.5),
         safeGap: opt.safeGap ?? 0,
         bandH: opt.bandH ?? 44,
         gapCenter: opt.gapCenter ?? x,
@@ -2392,7 +3351,7 @@
         gapAmp: opt.gapAmp ?? 0,
         gapSpeed: opt.gapSpeed ?? 0,
         damage: opt.damage ?? 1,
-        seed: rand(0, 999),
+        seed: srand(0, 999),
         turn: opt.turn ?? 1
       };
       if (type === "mine") {
@@ -2440,11 +3399,11 @@
     }
 
     function patternLane(gap = 1, lanes = 6) {
-      const start = (Math.random() * (lanes - gap)) | 0;
+      const start = (seededRand() * (lanes - gap)) | 0;
       for (let l = 0; l < lanes; l++) {
         if (l >= start && l < start + gap) continue;
-        spawnHazard("shard", chooseLaneX(l, lanes), -rand(40, 120), {
-          vy: rand(240, 320), hp: 2, amp: rand(8, 18), frequency: rand(1.2, 1.8)
+        spawnHazard("shard", chooseLaneX(l, lanes), -srand(40, 120), {
+          vy: srand(240, 320), hp: 2, amp: srand(8, 18), frequency: srand(1.2, 1.8)
         });
       }
     }
@@ -2453,76 +3412,76 @@
       setTimeout(() => { if (game.phase === "running") patternLane(2, 7); }, 220);
     }
     function patternSlalom() {
-      const left = Math.random() < 0.5;
+      const left = seededRand() < 0.5;
       for (let i = 0; i < 6; i++) {
         const dir = (i % 2 === 0) === left ? 0.24 : 0.76;
         spawnHazard("shard", W * dir, -80 - i * 84, {
-          vy: rand(240, 310), vx: left ? 20 : -20, amp: rand(26, 48), frequency: rand(1.4, 2.2)
+          vy: srand(240, 310), vx: left ? 20 : -20, amp: srand(26, 48), frequency: srand(1.4, 2.2)
         });
       }
     }
     function patternArc() {
-      const c = rand(0.3, 0.7) * W;
+      const c = srand(0.3, 0.7) * W;
       for (let i = 0; i < 5; i++) {
         const off = (i - 2) * 52;
         spawnHazard("shard", c + off, -120 - Math.abs(off) * 0.2, {
-          vy: rand(280, 355), vx: off * 0.38, amp: rand(8, 22), frequency: rand(1, 1.6)
+          vy: srand(280, 355), vx: off * 0.38, amp: srand(8, 22), frequency: srand(1, 1.6)
         });
       }
     }
     function patternMines() {
       const n = game.stageIndex >= 2 ? 4 : 3;
       for (let i = 0; i < n; i++) {
-        const lane = i + (Math.random() * 0.18 - 0.09);
+        const lane = i + (seededRand() * 0.18 - 0.09);
         const x = W * (0.18 + lane * (0.64 / Math.max(1, n - 1)));
         spawnHazard("mine", x, -100 - i * 90, {
-          vy: rand(150, 190), hp: 5 + game.stageIndex, amp: rand(18, 38), frequency: rand(0.7, 1.2)
+          vy: srand(150, 190), hp: 5 + game.stageIndex, amp: srand(18, 38), frequency: srand(0.7, 1.2)
         });
       }
     }
     function patternBeam(double = false) {
-      const safeGap = W * rand(0.22, 0.32);
+      const safeGap = W * srand(0.22, 0.32);
       spawnHazard("beam", W * 0.5, -80, {
         bandH: game.stageIndex >= 2 ? 48 : 42,
         safeGap,
-        gapBase: W * rand(0.32, 0.68),
+        gapBase: W * srand(0.32, 0.68),
         gapCenter: W * 0.5,
-        gapAmp: W * rand(0.06, 0.15),
-        gapSpeed: rand(1.4, 2.2),
-        vy: rand(190, 230)
+        gapAmp: W * srand(0.06, 0.15),
+        gapSpeed: srand(1.4, 2.2),
+        vy: srand(190, 230)
       });
       if (double) {
         spawnHazard("beam", W * 0.5, -260, {
           bandH: 50,
-          safeGap: W * rand(0.2, 0.27),
-          gapBase: W * rand(0.25, 0.75),
+          safeGap: W * srand(0.2, 0.27),
+          gapBase: W * srand(0.25, 0.75),
           gapCenter: W * 0.5,
-          gapAmp: W * rand(0.09, 0.18),
-          gapSpeed: rand(1.9, 2.7),
-          vy: rand(205, 245)
+          gapAmp: W * srand(0.09, 0.18),
+          gapSpeed: srand(1.9, 2.7),
+          vy: srand(205, 245)
         });
       }
     }
     function patternDroneV() {
-      const c = rand(0.32, 0.68) * W;
-      const sp = rand(42, 58);
+      const c = srand(0.32, 0.68) * W;
+      const sp = srand(42, 58);
       for (let i = 0; i < 5; i++) {
         const side = i - 2;
         spawnHazard("drone", c + side * sp, -100 - Math.abs(side) * 44, {
-          vy: rand(200, 235), vx: side * 10, hp: 4 + (game.stageIndex >= 3 ? 1 : 0)
+          vy: srand(200, 235), vx: side * 10, hp: 4 + (game.stageIndex >= 3 ? 1 : 0)
         });
       }
       spawnPickup("core", c, -360, { vy: 190 });
     }
     function patternRings() {
-      const base = rand(0.26, 0.74), dir = Math.random() < 0.5 ? -1 : 1;
+      const base = srand(0.26, 0.74), dir = seededRand() < 0.5 ? -1 : 1;
       for (let i = 0; i < 4; i++) {
         const wave = base + dir * (i * 0.08) + Math.sin(i * 1.1) * 0.07;
         spawnRing(clamp(wave, 0.18, 0.82) * W, -80 - i * 150, 42);
       }
-      if (Math.random() < 0.65) {
+      if (seededRand() < 0.65) {
         spawnHazard("shard", clamp(base + dir * 0.2, 0.16, 0.84) * W, -290, {
-          vy: rand(255, 315), hp: 3
+          vy: srand(255, 315), hp: 3
         });
       }
     }
@@ -2531,7 +3490,7 @@
       for (let i = 0; i < 7; i++) {
         const off = (i - 3) * 58;
         spawnHazard("shard", c + off, -110 - i * 48, {
-          vy: rand(290, 360), vx: -off * 0.22, amp: 44, frequency: 2.2
+          vy: srand(290, 360), vx: -off * 0.22, amp: 44, frequency: 2.2
         });
       }
       spawnRing(c, -480, 50);
@@ -2540,7 +3499,7 @@
     function spawnPattern() {
       if (game.bossActive) return;
       const stage = game.stage;
-      const name = pick(stage.patterns);
+      const name = spick(stage.patterns);
       if (name === "lane") patternLane(game.stageIndex >= 2 ? 2 : 1, game.stageIndex >= 2 ? 7 : 6);
       else if (name === "doubleLane") patternDoubleLane();
       else if (name === "slalom") patternSlalom();
@@ -2552,18 +3511,19 @@
       else if (name === "droneV") patternDroneV();
       else if (name === "eyeSpiral") patternEyeSpiral();
       const cd = stage.cooldown;
-      game.patternTimer = rand(cd[0], cd[1]);
+      const dm = (game.diffMul || 1);
+      game.patternTimer = srand(cd[0], cd[1]) / Math.max(0.65, dm);
     }
 
     function spawnAmbientPickup() {
-      if (Math.random() < 0.65) {
-        spawnPickup("core", W * rand(0.2, 0.8), -50, { vy: rand(140, 185) });
-      } else if (player.hp < player.maxHp && Math.random() < 0.34) {
-        spawnPickup("repair", W * rand(0.28, 0.72), -60, { vy: 165 });
+      if (seededRand() < 0.65) {
+        spawnPickup("core", W * srand(0.2, 0.8), -50, { vy: srand(140, 185) });
+      } else if (player.hp < player.maxHp && seededRand() < 0.34) {
+        spawnPickup("repair", W * srand(0.28, 0.72), -60, { vy: 165 });
       } else {
-        spawnPickup("core", W * rand(0.2, 0.8), -50, { vy: rand(140, 185) });
+        spawnPickup("core", W * srand(0.2, 0.8), -50, { vy: srand(140, 185) });
       }
-      game.pickupTimer = rand(1.6, 2.6);
+      game.pickupTimer = srand(1.6, 2.6);
     }
 
     /* ============================================================
@@ -2766,6 +3726,18 @@
       const sens = save.settings.sens;
       const dead = save.settings.dead;
 
+      // Auto-calibration: when posture is stable for a while, slowly adapt baseline.
+      // Helps players who naturally hold the phone at non-zero angles.
+      if (save.settings.autoCalibrate && game.mode === "gyro" && input.sensorSamples > 0) {
+        // Adapt slowly when target near center (i.e. player not actively tilting)
+        const nearCenter = Math.abs(input.targetX - 0.5) < 0.06 && Math.abs(input.targetY - 0.78) < 0.05;
+        if (nearCenter) {
+          const a = 1 - Math.pow(0.4, dt); // slow drift
+          input.baseGamma = lerp(input.baseGamma, input.filteredGamma, a * 0.3);
+          input.baseBeta = lerp(input.baseBeta, input.filteredBeta, a * 0.3);
+        }
+      }
+
       if (game.mode === "gyro" && input.sensorSamples > 0) {
         const dGamma = (input.filteredGamma - input.baseGamma) / 22;
         const dBeta = -(input.filteredBeta - input.baseBeta) / 24;
@@ -2773,11 +3745,25 @@
         const dy = Math.abs(dBeta) < dead ? 0 : dBeta;
         input.targetX = clamp(0.5 + dx * 0.95 * sens, 0.09, 0.91);
         input.targetY = clamp(0.78 + dy * 0.55 * sens, 0.30, 0.90);
-      } else if (game.mode === "touch" || input.touchActive) {
+      } else if (game.mode === "touch") {
         if (input.touchActive) {
-          // Joystick mode: relative
-          const dx = (input.touchX - input.touchStartX) / 100;
-          const dy = (input.touchY - input.touchStartY) / 100;
+          if (input.touchAbsolute) {
+            // Drag-anywhere absolute follow
+            input.targetX = clamp(input.touchX / W, 0.09, 0.91);
+            input.targetY = clamp(input.touchY / H, 0.30, 0.90);
+          } else {
+            // Relative joystick
+            const dx = (input.touchX - input.touchStartX) / 100;
+            const dy = (input.touchY - input.touchStartY) / 100;
+            input.targetX = clamp(0.5 + dx * sens, 0.09, 0.91);
+            input.targetY = clamp(0.78 + dy * sens, 0.30, 0.90);
+          }
+        }
+      } else if (game.mode === "joystick") {
+        // Persistent joystick at fixed position
+        if (input.touchActive) {
+          const dx = (input.touchX - input.touchStartX) / 80;
+          const dy = (input.touchY - input.touchStartY) / 80;
           input.targetX = clamp(0.5 + dx * sens, 0.09, 0.91);
           input.targetY = clamp(0.78 + dy * sens, 0.30, 0.90);
         }
@@ -3028,6 +4014,25 @@
     /* ============================================================
        Main update
        ============================================================ */
+    function updateCountdown(dt) {
+      game.countdownT -= dt;
+      const num = $("countdownNum");
+      if (game.countdownT > 2) num.textContent = "3";
+      else if (game.countdownT > 1) num.textContent = "2";
+      else if (game.countdownT > 0) num.textContent = "1";
+      else num.textContent = "GO!";
+      if (game.countdownT <= -0.45) {
+        $("countdown").classList.remove("show");
+        game.phase = "running";
+        game.running = true;
+        showToast(game.kind === "vs" ? "FIGHT!" : game.stage.name, 1.6);
+      }
+      // Keep input and gentle drift while counting down
+      updateInput(dt);
+      updateParticles(dt * 0.8);
+      updateHud();
+    }
+
     function updateGame(dt) {
       // time scale (slow on hit)
       if (timeScaleTimer > 0) {
@@ -3058,8 +4063,19 @@
         if (game.chainTimer <= 0) breakChain();
       }
 
-      // Boss spawn check
-      if (game.stage.bossAt != null && !game.bossSpawned && game.time >= game.stage.bossAt) {
+      // Endless: ramp difficulty over time and announce waves
+      if (game.kind === "endless") {
+        game.diffMul = 1 + game.time * 0.02; // +20% per ~10s
+        const wave = 1 + Math.floor(game.time / 30);
+        if (wave !== game.endlessWave) {
+          game.endlessWave = wave;
+          showToast(`WAVE ${wave}`, 1.8);
+          sfx("sector");
+        }
+      }
+
+      // Boss spawn check (story only)
+      if (game.kind === "story" && game.stage.bossAt != null && !game.bossSpawned && game.time >= game.stage.bossAt) {
         game.bossSpawned = true;
         spawnBoss();
       }
@@ -3084,11 +4100,80 @@
 
       if (player.charge >= 100 && player.overdrive <= 0) triggerOverdrive();
 
-      // End conditions
-      if (game.stage.bossAt == null && game.time >= game.stage.duration) {
-        finishRun(true);
-      } else if (game.stage.bossAt != null && game.time >= game.stage.duration && !game.bossKilled && !game.bossActive) {
-        // shouldn't happen but safety
+      // VS networking: send our state at ~30Hz, lerp peer state
+      if (game.kind === "vs") {
+        game.vsLastSent += dt;
+        if (game.vsLastSent >= 0.033 && VS.connected) {
+          game.vsLastSent = 0;
+          VS.send({
+            t: "state",
+            x: clamp(player.x / W, 0, 1),
+            y: clamp(player.y / H, 0, 1),
+            hp: player.hp,
+            maxHp: player.maxHp,
+            score: game.score,
+            charge: player.charge,
+            over: player.overdrive,
+            firing: 1
+          });
+        }
+        // smoothly lerp peer pos
+        if (game.vsPeerTargetX != null) {
+          game.vsPeerX = lerp(game.vsPeerX, game.vsPeerTargetX, Math.min(1, dt * 12));
+          game.vsPeerY = lerp(game.vsPeerY, game.vsPeerTargetY, Math.min(1, dt * 12));
+        }
+        // peer bullet motion
+        for (let i = peerBullets.length - 1; i >= 0; i--) {
+          const b = peerBullets[i];
+          b.y += 600 * sdt; // peer fires DOWN at us in our view
+          b.life -= sdt;
+          if (b.life <= 0 || b.y > H + 30) peerBullets.splice(i, 1);
+        }
+        // VS overdrive damage to peer
+        if (player.overdrive > 0 && !game.vsOverDealt) {
+          game.vsOverDealt = true;
+          if (VS.connected) VS.send({ t: "hit", dmg: 1 });
+        }
+        if (player.overdrive <= 0) game.vsOverDealt = false;
+
+        // VS end conditions
+        if (!game.vsEndedReason) {
+          if (game.vsPeerHp <= 0) {
+            game.vsEndedReason = "win";
+            if (VS.connected) VS.send({ t: "over", reason: "lose" });
+            finishRun(true);
+            return;
+          } else if (player.hp <= 0) {
+            game.vsEndedReason = "lose";
+            if (VS.connected) VS.send({ t: "over", reason: "win" });
+            finishRun(false);
+            return;
+          } else if (game.time >= game.stage.duration) {
+            // 90s timeout: HP comparison, fallback to score
+            const myHpPct = player.hp / Math.max(1, player.maxHp);
+            const peerHpPct = game.vsPeerHp / Math.max(1, game.vsPeerMaxHp || 5);
+            let result;
+            if (myHpPct > peerHpPct + 0.001) result = "win";
+            else if (myHpPct < peerHpPct - 0.001) result = "lose";
+            else if (game.score > game.vsPeerScore) result = "win";
+            else if (game.score < game.vsPeerScore) result = "lose";
+            else result = "draw";
+            game.vsEndedReason = result;
+            finishRun(result === "win");
+            return;
+          }
+        }
+      }
+
+      // End conditions (story / endless)
+      if (game.kind === "story") {
+        if (game.stage.bossAt == null && game.time >= game.stage.duration) {
+          finishRun(true);
+        }
+      } else if (game.kind === "endless") {
+        if (player.hp <= 0) {
+          finishRun(false); // endless ends on death (still records best)
+        }
       }
 
       updateHud();
@@ -3111,8 +4196,98 @@
       game.running = false;
       $("hud").classList.add("hidden");
       $("bossBar").classList.remove("show");
+      const vsHud = $("vsHud"); if (vsHud) vsHud.classList.remove("show");
+      const cd = $("countdown"); if (cd) cd.classList.remove("show");
       hideJoy();
 
+      // ===== VS branch =====
+      if (game.kind === "vs") {
+        const reason = game.vsEndedReason || (victory ? "win" : "lose");
+        const banner = $("resultVsBanner");
+        $("resultModal").classList.remove("hidden");
+        if (banner) {
+          banner.style.display = "block";
+          if (reason === "win") {
+            banner.textContent = "🏆 VICTORY";
+            banner.style.background = "linear-gradient(90deg, rgba(80,255,180,0.2), rgba(80,255,180,0.05))";
+            banner.style.color = "#7effc6";
+            save.vsWins = (save.vsWins || 0) + 1;
+          } else if (reason === "lose") {
+            banner.textContent = "💀 DEFEAT";
+            banner.style.background = "linear-gradient(90deg, rgba(255,90,120,0.2), rgba(255,90,120,0.05))";
+            banner.style.color = "#ffa0b3";
+            save.vsLosses = (save.vsLosses || 0) + 1;
+          } else {
+            banner.textContent = "⚖️ DRAW";
+            banner.style.background = "linear-gradient(90deg, rgba(255,210,120,0.2), rgba(255,210,120,0.05))";
+            banner.style.color = "#ffd97a";
+          }
+        }
+        $("resultEyebrow").textContent = "Friend VS Result";
+        $("resultTitle").textContent = reason === "win" ? "🏆 勝利！" : reason === "lose" ? "💥 敗北" : "⚖️ 引き分け";
+        $("resultLead").textContent = `相手HP: ${game.vsPeerHp.toFixed(1)} / ${(game.vsPeerMaxHp||5).toFixed(1)}  あなた: ${player.hp.toFixed(1)} / ${player.maxHp.toFixed(1)}`;
+        $("resultScore").textContent = fmt(game.score);
+        $("resultRank").textContent = reason === "win" ? "WIN" : reason === "lose" ? "LOSE" : "DRAW";
+        $("resultBest").textContent = `${save.vsWins||0} - ${save.vsLosses||0}`;
+        $("resultStars").innerHTML = `<span style="color:var(--muted); font-size:0.8em;">VS</span>`;
+        $("resultRewardHead").textContent = "対戦結果";
+        const rl = $("rewardList");
+        rl.innerHTML = "";
+        const row = document.createElement("div");
+        row.className = "reward-row";
+        row.innerHTML = `相手スコア: <b>${fmt(game.vsPeerScore||0)}</b>`;
+        rl.appendChild(row);
+        if (game.score > save.bestScore) save.bestScore = game.score;
+        persist();
+        if (reason === "win") sfx("finish");
+        else if (reason === "lose") sfx("fail");
+        else sfx("sector");
+        haptic(reason === "win" ? [80, 60, 80, 60, 120] : [200, 100, 200]);
+        // Disconnect VS after brief delay so peer gets the "over" message
+        setTimeout(() => { try { VS.disconnect(); } catch(e){} }, 300);
+        return;
+      }
+
+      // ===== Endless branch =====
+      if (game.kind === "endless") {
+        const banner = $("resultVsBanner");
+        if (banner) banner.style.display = "none";
+        $("resultModal").classList.remove("hidden");
+        $("resultEyebrow").textContent = "Endless Drift";
+        $("resultTitle").textContent = "💫 Run Over";
+        $("resultLead").textContent = `${game.time.toFixed(1)}秒・WAVE ${game.endlessWave} 到達`;
+        $("resultScore").textContent = fmt(game.score);
+        const isNewBest = game.score > (save.endlessBest || 0);
+        if (isNewBest) {
+          save.endlessBest = game.score;
+          save.endlessBestTime = game.time;
+        }
+        $("resultRank").textContent = isNewBest ? "BEST!" : "—";
+        $("resultBest").textContent = fmt(save.endlessBest || 0);
+        $("resultStars").innerHTML = `<span style="color:var(--accent); font-weight:900;">∞</span>`;
+        $("resultRewardHead").textContent = isNewBest ? "🎉 新記録！" : "結果";
+        const rl = $("rewardList");
+        rl.innerHTML = "";
+        // Endless gives small dust based on score
+        const dust = Math.floor(game.score / 300);
+        if (dust > 0) {
+          save.currencies.dust += dust;
+          const r = document.createElement("div"); r.className = "reward-row";
+          r.innerHTML = `★ ${dust} dust`; rl.appendChild(r);
+        } else {
+          rl.innerHTML = `<div class="reward-row" style="color:var(--muted);">報酬なし</div>`;
+        }
+        if (game.score > save.bestScore) save.bestScore = game.score;
+        persist();
+        sfx("fail");
+        haptic([100, 60, 100]);
+        return;
+      }
+
+      // ===== Story branch (original logic) =====
+      const banner = $("resultVsBanner");
+      if (banner) banner.style.display = "none";
+      $("resultRewardHead").textContent = "獲得報酬";
       const stage = game.stage;
       const stageIdx = game.stageIndex;
       let stars = 0;
@@ -3205,7 +4380,15 @@
 
     $("resultRetryBtn").addEventListener("click", () => {
       $("resultModal").classList.add("hidden");
-      startMission(game.stageIndex);
+      if (game.kind === "vs") {
+        // After VS, returning to home is safer (peer disconnected)
+        returnToHome();
+        showScreen("vs");
+      } else if (game.kind === "endless") {
+        startEndless();
+      } else {
+        startMission(game.stageIndex);
+      }
     });
     $("resultMenuBtn").addEventListener("click", () => {
       $("resultModal").classList.add("hidden");
@@ -3230,12 +4413,34 @@
         d.className = "pip" + (i < cur ? " on" : "");
         pips.appendChild(d);
       }
-      $("modeText").textContent = game.mode === "gyro" ? "GYRO" : "TOUCH";
-      $("sectorText").textContent = game.stage.short;
-      $("timeText").textContent = `${Math.max(0, game.stage.duration - game.time).toFixed(1)}s`;
+      $("modeText").textContent = game.mode === "gyro" ? "GYRO" : (game.mode === "joystick" ? "STICK" : "TOUCH");
+      $("sectorText").textContent = game.kind === "endless" ? `Endless W${game.endlessWave||1}` : game.stage.short;
+      if (game.kind === "endless") {
+        $("timeText").textContent = `${game.time.toFixed(1)}s`;
+      } else if (game.kind === "vs") {
+        $("timeText").textContent = `${Math.max(0, game.stage.duration - game.time).toFixed(1)}s`;
+      } else {
+        $("timeText").textContent = `${Math.max(0, game.stage.duration - game.time).toFixed(1)}s`;
+      }
       $("chargeText").textContent = player.overdrive > 0 ? `OD ${Math.ceil(player.overdrive * 10) / 10}s` : `${Math.round(player.charge)}%`;
-      $("missionFill").style.width = `${clamp((game.time / game.stage.duration) * 100, 0, 100)}%`;
+      const missionPct = game.kind === "endless" ? Math.min(100, (game.time % 30) / 30 * 100) : clamp((game.time / game.stage.duration) * 100, 0, 100);
+      $("missionFill").style.width = `${missionPct}%`;
       $("chargeFill").style.width = `${player.overdrive > 0 ? 100 : clamp(player.charge, 0, 100)}%`;
+
+      // VS HUD update
+      if (game.kind === "vs") updateVsHud();
+    }
+
+    function updateVsHud() {
+      const lf = $("vsLeftFill"), rf = $("vsRightFill");
+      const ls = $("vsLeftScore"), rs = $("vsRightScore");
+      const ln = $("vsLeftName"), rn = $("vsRightName");
+      if (lf) lf.style.width = `${clamp(player.hp / Math.max(1, player.maxHp) * 100, 0, 100)}%`;
+      if (rf) rf.style.width = `${clamp((game.vsPeerHp || 0) / Math.max(1, game.vsPeerMaxHp || 5) * 100, 0, 100)}%`;
+      if (ls) ls.textContent = fmt(game.score);
+      if (rs) rs.textContent = fmt(game.vsPeerScore || 0);
+      if (ln) ln.textContent = save.vsName || "あなた";
+      if (rn) rn.textContent = game.vsPeerName || "相手";
     }
 
     /* ============================================================
@@ -3550,6 +4755,105 @@
       ctx.restore();
     }
 
+    function drawPeer() {
+      // Draw opponent ship at top of screen, mirrored vertically
+      if (game.kind !== "vs") return;
+      const px = clamp((game.vsPeerX || 0.5) * W, 22, W - 22);
+      const py = clamp((game.vsPeerY || 0.18) * H, 30, H * 0.4);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(Math.PI); // mirror — peer faces down toward us
+      // halo
+      const gr = 28;
+      const g = ctx.createRadialGradient(0, 0, 4, 0, 0, gr);
+      const peerHot = (game.vsPeerOver || 0) > 0;
+      g.addColorStop(0, peerHot ? "rgba(255,170,210,0.34)" : "rgba(255,150,200,0.26)");
+      g.addColorStop(1, "rgba(255,150,200,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, gr, 0, TAU); ctx.fill();
+      // body
+      ctx.beginPath();
+      ctx.moveTo(0, -26);
+      ctx.lineTo(18, 16);
+      ctx.lineTo(0, 10);
+      ctx.lineTo(-18, 16);
+      ctx.closePath();
+      const hull = ctx.createLinearGradient(-18, -20, 18, 18);
+      hull.addColorStop(0, peerHot ? "#ffeaf3" : "#ffe5ee");
+      hull.addColorStop(0.6, peerHot ? "#ff90c4" : "#ff6f9a");
+      hull.addColorStop(1, "#9c2050");
+      ctx.fillStyle = hull;
+      ctx.fill();
+      // cockpit
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(8, 6);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-8, 6);
+      ctx.closePath();
+      ctx.fillStyle = "#330322";
+      ctx.fill();
+      // thrust
+      ctx.fillStyle = peerHot ? "#ffd6e8" : "#ffae9a";
+      ctx.beginPath();
+      ctx.moveTo(-7, 17);
+      ctx.lineTo(0, 28 + Math.sin(game.time * 40) * 2);
+      ctx.lineTo(7, 17);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // name tag near peer ship
+      ctx.save();
+      ctx.font = '700 11px "Hiragino Sans", "Yu Gothic UI", sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255,200,220,0.9)";
+      ctx.fillText(game.vsPeerName || "ENEMY", px, py + 44);
+      ctx.restore();
+    }
+
+    function drawPeerBullets() {
+      if (peerBullets.length === 0) return;
+      ctx.save();
+      for (const b of peerBullets) {
+        const grad = ctx.createLinearGradient(b.x, b.y - 12, b.x, b.y + 12);
+        grad.addColorStop(0, "rgba(255,140,180,0)");
+        grad.addColorStop(0.4, "rgba(255,160,200,0.85)");
+        grad.addColorStop(1, "rgba(255,255,255,1)");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y - 8);
+        ctx.lineTo(b.x, b.y + 8);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawCountdownOverlay() {
+      if (game.phase !== "countdown") return;
+      const t = clamp(1 - (game.countdownT % 1 + 1) % 1, 0, 1); // fractional part for pulse
+      ctx.save();
+      ctx.fillStyle = "rgba(4,9,15,0.45)";
+      ctx.fillRect(0, 0, W, H);
+      let label;
+      if (game.countdownT > 2) label = "3";
+      else if (game.countdownT > 1) label = "2";
+      else if (game.countdownT > 0) label = "1";
+      else label = "GO!";
+      const scale = 1 + (1 - t) * 0.4;
+      ctx.translate(W * 0.5, H * 0.5);
+      ctx.scale(scale, scale);
+      ctx.font = '900 96px "Hiragino Sans", "Yu Gothic UI", sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(94,246,255,0.8)";
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = label === "GO!" ? "#90ffd7" : "#eafaff";
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
+
     function drawTargetReticle() {
       if (game.mode === "touch" && !input.touchActive) return;
       const x = input.targetX * W, y = input.targetY * H;
@@ -3581,7 +4885,7 @@
     }
 
     function render() {
-      const inMission = game.phase === "running" || game.phase === "paused";
+      const inMission = game.phase === "running" || game.phase === "paused" || game.phase === "countdown";
       ctx.save();
       if (game.shake > 0) ctx.translate(rand(-game.shake, game.shake), rand(-game.shake, game.shake));
       drawBackground();
@@ -3591,6 +4895,8 @@
         drawHazards();
         drawBoss();
         drawBullets();
+        drawPeerBullets();
+        drawPeer();
       }
       drawParticles();
       if (inMission) drawTargetReticle();
@@ -3601,6 +4907,7 @@
         ctx.fillRect(0, 0, W, H);
       }
       drawPauseOverlay();
+      drawCountdownOverlay();
     }
 
     function updateAttract(dt) {
@@ -3623,6 +4930,7 @@
       const dt = Math.min(0.033, ((t - lastTime) || 16.7) / 1000);
       lastTime = t;
       if (game.phase === "running") updateGame(dt);
+      else if (game.phase === "countdown") updateCountdown(dt);
       else if (game.phase === "paused") {
         game.demoTime += dt;
         updateParticles(dt * 0.25);
@@ -3657,6 +4965,46 @@
         save.tutorialDone = true;
         persist();
       }
+
+      // ===== PWA: register service worker =====
+      if ("serviceWorker" in navigator) {
+        // Register quietly; ignore errors (e.g. on file:// or unsupported browsers)
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./service-worker.js").catch(err => {
+            console.warn("SW register failed:", err);
+          });
+        });
+      }
+
+      // ===== PWA: capture install prompt =====
+      let deferredInstallPrompt = null;
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        const cta = $("installCta");
+        if (cta) cta.style.display = "flex";
+      });
+      const installBtn = $("btn-install");
+      if (installBtn) {
+        installBtn.addEventListener("click", async () => {
+          if (!deferredInstallPrompt) {
+            showToast("ホーム画面に追加：ブラウザの共有メニューから「ホーム画面に追加」を選んでください");
+            return;
+          }
+          deferredInstallPrompt.prompt();
+          try {
+            const choice = await deferredInstallPrompt.userChoice;
+            if (choice && choice.outcome === "accepted") {
+              showToast("インストールしました！");
+              const cta = $("installCta"); if (cta) cta.style.display = "none";
+            }
+          } catch(e) {}
+          deferredInstallPrompt = null;
+        });
+      }
+      window.addEventListener("appinstalled", () => {
+        const cta = $("installCta"); if (cta) cta.style.display = "none";
+      });
     }
 
     init();
