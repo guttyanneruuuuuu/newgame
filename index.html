@@ -1810,28 +1810,28 @@
         name: "Sector 1: Dawn Shelf",
         short: "Dawn Shelf",
         duration: 70,
-        difficulty: 1.0,
+        difficulty: 0.85,
         colors: ["#081726", "#0b2137", "#153d48"],
-        patterns: ["lane", "slalom", "rings", "arc"],
-        cooldown: [1.4, 2.0],
+        patterns: ["lane", "rings", "arc"],
+        cooldown: [1.6, 2.2],
         bossAt: null,
-        rewardCore: [180, 240, 320],   // by stars
+        rewardCore: [180, 240, 320],
         rewardGem: [3, 5, 8],
-        starThresholds: [3000, 6000, 10000]
+        starThresholds: [2500, 5000, 8000]
       },
       {
         index: 2,
         name: "Sector 2: Glass Rain",
         short: "Glass Rain",
         duration: 80,
-        difficulty: 1.25,
+        difficulty: 1.15,
         colors: ["#071421", "#10263d", "#113955"],
-        patterns: ["lane", "mines", "beam", "rings", "arc", "slalom"],
-        cooldown: [1.15, 1.75],
+        patterns: ["lane", "rings", "arc", "slalom", "beam"],
+        cooldown: [1.25, 1.85],
         bossAt: null,
         rewardCore: [260, 360, 460],
         rewardGem: [5, 8, 12],
-        starThresholds: [5000, 9000, 14000]
+        starThresholds: [4500, 8000, 12000]
       },
       {
         index: 3,
@@ -1898,10 +1898,10 @@
       name: "Friend VS Arena",
       short: "VS Arena",
       duration: 90,
-      difficulty: 1.2,
+      difficulty: 1.3,
       colors: ["#0a1024", "#1a1442", "#3a1a5e"],
-      patterns: ["lane", "slalom", "rings", "arc", "mines", "droneV"],
-      cooldown: [1.15, 1.6],
+      patterns: ["lane", "rings", "arc", "mines", "beam", "droneV"],
+      cooldown: [1.0, 1.5],
       bossAt: null,
       rewardCore: [0, 0, 0],
       rewardGem: [0, 0, 0],
@@ -3720,8 +3720,11 @@
     }
 
     function updateInput(dt) {
-      input.filteredGamma = lerp(input.filteredGamma, input.gamma, 1 - Math.pow(0.001, dt));
-      input.filteredBeta = lerp(input.filteredBeta, input.beta, 1 - Math.pow(0.001, dt));
+      // Adaptive filtering based on preset
+      const preset = save.settings.preset || "normal";
+      const filterStrength = preset === "easy" ? 0.0005 : preset === "hard" ? 0.002 : 0.001;
+      input.filteredGamma = lerp(input.filteredGamma, input.gamma, 1 - Math.pow(filterStrength, dt));
+      input.filteredBeta = lerp(input.filteredBeta, input.beta, 1 - Math.pow(filterStrength, dt));
 
       const sens = save.settings.sens;
       const dead = save.settings.dead;
@@ -3741,8 +3744,11 @@
       if (game.mode === "gyro" && input.sensorSamples > 0) {
         const dGamma = (input.filteredGamma - input.baseGamma) / 22;
         const dBeta = -(input.filteredBeta - input.baseBeta) / 24;
-        const dx = Math.abs(dGamma) < dead ? 0 : dGamma;
-        const dy = Math.abs(dBeta) < dead ? 0 : dBeta;
+        let effectiveDead = dead;
+        if (save.settings.preset === "easy" && dead === 0.05) effectiveDead = 0.08;
+        else if (save.settings.preset === "hard" && dead === 0.05) effectiveDead = 0.02;
+        const dx = Math.abs(dGamma) < effectiveDead ? 0 : dGamma;
+        const dy = Math.abs(dBeta) < effectiveDead ? 0 : dBeta;
         input.targetX = clamp(0.5 + dx * 0.95 * sens, 0.09, 0.91);
         input.targetY = clamp(0.78 + dy * 0.55 * sens, 0.30, 0.90);
       } else if (game.mode === "touch") {
