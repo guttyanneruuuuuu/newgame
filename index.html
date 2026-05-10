@@ -3050,7 +3050,7 @@
             setTimeout(() => {
               setStatus("IN-MATCH", "対戦中");
               startMission(0, { kind: "vs", seed });
-            }, 400);
+            }, 600);
           }
         });
         c.on("data", onMessage);
@@ -3060,12 +3060,17 @@
             // Treat early disconnect as our win (peer left)
             game.vsEndedReason = "win";
             finishRun(true);
+            showToast("相手が切断しました。勝利！", 2.0);
           }
           setStatus("OFFLINE", "切断されました");
         });
         c.on("error", (err) => {
           console.warn("conn error", err);
-          setStatus("ERROR", "接続エラー: " + (err && err.type ? err.type : "unknown"));
+          if (err && err.type === "network") {
+            setStatus("ERROR", "ネットワークエラー");
+          } else {
+            setStatus("ERROR", "接続エラー: " + (err && err.type ? err.type : "unknown"));
+          }
         });
       }
 
@@ -3167,7 +3172,11 @@
           });
           peer.on("error", (err) => {
             console.warn("host peer err", err);
-            setStatus("ERROR", "ホストエラー: " + (err && err.type ? err.type : ""));
+            if (err && err.type === "peer-unavailable") {
+              setStatus("ERROR", "ピアが利用不可です");
+            } else {
+              setStatus("ERROR", "ホストエラー: " + (err && err.type ? err.type : ""));
+            }
           });
         });
         hostPeer.on("error", (err) => {
@@ -3188,7 +3197,11 @@
             });
             gPeer.on("error", (e2) => {
               console.warn("guest peer err", e2);
-              setStatus("ERROR", "接続失敗: " + (e2 && e2.type ? e2.type : ""));
+              if (e2 && e2.type === "peer-unavailable") {
+                setStatus("ERROR", "ホストが見つかりません");
+              } else {
+                setStatus("ERROR", "接続失敗: " + (e2 && e2.type ? e2.type : ""));
+              }
             });
           } else {
             console.warn("peer err", err);
@@ -4158,11 +4171,11 @@
             t: "state",
             x: clamp(player.x / W, 0, 1),
             y: clamp(player.y / H, 0, 1),
-            hp: player.hp,
-            maxHp: player.maxHp,
-            score: game.score,
-            charge: player.charge,
-            over: player.overdrive,
+            hp: Math.round(player.hp * 100) / 100,
+            maxHp: Math.round(player.maxHp * 100) / 100,
+            score: Math.round(game.score),
+            charge: Math.round(player.charge),
+            over: Math.round(player.overdrive * 100) / 100,
             firing: 1
           });
         }
