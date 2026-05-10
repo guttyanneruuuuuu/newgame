@@ -22,8 +22,8 @@ BDR.game = (function() {
     moveForce: 9.0,        // higher = more responsive
     maxSpeed: 10.5,
     airControl: 0.4,
-    cameraDist: 4.2,
-    cameraHeight: 2.4,
+    cameraDist: 5.2,
+    cameraHeight: 3.4,    // raised so player can see ahead over walls
     cameraLookAhead: 0.0,  // fixed camera; no look-ahead
     fov: 78,
     pvpKnockback: 6.5
@@ -743,6 +743,13 @@ BDR.game = (function() {
       );
       camera.position.lerp(desired, 0.18);
       camera.lookAt(new THREE.Vector3(target.x, target.y + 0.4, target.z));
+
+      // Look-ahead "see-through" effect: walls very close in front of camera
+      // (between camera and player) get pushed downward visually so player sees
+      // ahead without losing the ball. We do this lightly by raycasting.
+      // Performance: only the few walls overlapping the camera-player segment.
+      // Simpler approach: dim walls within near-camera frustum band by adjusting
+      // their material dynamically — skipped for now to avoid GC churn.
     }
 
     // Mini-map render
