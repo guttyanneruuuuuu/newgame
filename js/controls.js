@@ -38,8 +38,8 @@ BDR.controls = (function() {
   }
 
   // ---------------- Gyro ----------------
-  // User-requested intuitive mapping (re-fixed):
-  //   * Tilt the FAR edge of the phone DOWN  => ball goes UP on screen.
+  // User-requested intuitive mapping:
+  //   * Tilt the FAR edge of the phone DOWN  => ball goes to the FAR side on screen.
   //   * Tilt the right edge DOWN              => ball goes RIGHT on screen.
   //   * Larger dead-zone & response curve so small jitters don't drift.
   //   * Exponential response curve so small tilts give precise control,
@@ -55,7 +55,7 @@ BDR.controls = (function() {
     smooth: 0.32,          // higher = snappier (was 0.22)
     sensitivity: 1.25,     // overall multiplier (gain)
     curve: 1.6,            // response curve exponent (>1 = gentler near 0, faster at extremes)
-    invertForwardBack: false, // tilting far edge DOWN should move UP on screen
+    invertForwardBack: true,  // tilting far edge DOWN should move to FAR side (screen up)
     invertLeftRight: false
   };
   let smoothedX = 0, smoothedZ = 0;
@@ -66,6 +66,32 @@ BDR.controls = (function() {
     const s = Math.sign(v);
     const a = Math.min(1, Math.abs(v));
     return s * Math.pow(a, exp);
+  }
+
+  function normalizeScreenAngle(angle) {
+    const a = Number.isFinite(angle) ? angle : 0;
+    const snapped = Math.round(a / 90) * 90;
+    return ((snapped % 360) + 360) % 360;
+  }
+
+  function getScreenAngle() {
+    const byScreen = window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number'
+      ? window.screen.orientation.angle
+      : null;
+    const byLegacy = typeof window.orientation === 'number' ? window.orientation : null;
+    return normalizeScreenAngle(byScreen ?? byLegacy ?? 0);
+  }
+
+  // Map device tilt into "screen-forward/screen-right" axes so controls stay stable
+  // even if the browser reports orientation in landscape/upside-down.
+  function remapTiltToScreenAxes(dBeta, dGamma) {
+    const a = getScreenAngle();
+    switch (a) {
+      case 90:  return { fb: -dGamma, lr:  dBeta };
+      case 180: return { fb: -dBeta,  lr: -dGamma };
+      case 270: return { fb:  dGamma, lr: -dBeta };
+      default:  return { fb:  dBeta,  lr:  dGamma };
+    }
   }
 
   function onDeviceOrientation(e) {
@@ -81,16 +107,19 @@ BDR.controls = (function() {
       state.gyro.calibrated = true;
     }
 
-    let dBeta = beta - state.gyro.baseBeta;
-    let dGamma = gamma - state.gyro.baseGamma;
+    const dBeta = beta - state.gyro.baseBeta;
+    const dGamma = gamma - state.gyro.baseGamma;
+    const tilt = remapTiltToScreenAxes(dBeta, dGamma);
+    let fb = tilt.fb;
+    let lr = tilt.lr;
 
     // dead zone
     const dz = GYRO.deadZone;
-    if (Math.abs(dBeta) < dz) dBeta = 0; else dBeta = dBeta - Math.sign(dBeta) * dz;
-    if (Math.abs(dGamma) < dz) dGamma = 0; else dGamma = dGamma - Math.sign(dGamma) * dz;
+    if (Math.abs(fb) < dz) fb = 0; else fb = fb - Math.sign(fb) * dz;
+    if (Math.abs(lr) < dz) lr = 0; else lr = lr - Math.sign(lr) * dz;
 
-    let nxRaw = BDR.clamp(dGamma / GYRO.maxAngle, -1, 1);
-    let nzRaw = BDR.clamp(dBeta  / GYRO.maxAngle, -1, 1);
+    let nxRaw = BDR.clamp(lr / GYRO.maxAngle, -1, 1);
+    let nzRaw = BDR.clamp(fb / GYRO.maxAngle, -1, 1);
 
     // Curve so tiny tilts feel gentle and natural
     let nx = applyCurve(nxRaw, GYRO.curve) * GYRO.sensitivity;
@@ -99,12 +128,8 @@ BDR.controls = (function() {
     nz = BDR.clamp(nz, -1, 1);
 
     if (GYRO.invertLeftRight) nx = -nx;
-    // === Forward/back mapping (user requested fix) ===
-    // beta > 0 = far edge down. We want this to mean +Z world (forward into the screen).
-    // Camera looks toward -Z, so "up on screen" = -Z. To make far-edge-down translate to
-    // moving "up on screen", we need beta>0 -> -Z, i.e. invert nz. The previous build
-    // already inverted; users reported it still felt reversed because of phone orientation
-    // detection differences. We expose `invertForwardBack` and default to NOT inverting now.
+    // beta > 0 = far edge down. Camera looks toward -Z when yaw=0, so
+    // "far side of screen" corresponds to -Z in world space.
     if (GYRO.invertForwardBack) nz = -nz;
 
     // Smooth
