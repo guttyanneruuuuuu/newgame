@@ -55,7 +55,7 @@ BDR.controls = (function() {
     smooth: 0.32,          // higher = snappier (was 0.22)
     sensitivity: 1.25,     // overall multiplier (gain)
     curve: 1.6,            // response curve exponent (>1 = gentler near 0, faster at extremes)
-    invertForwardBack: true,  // tilting far edge DOWN should move to FAR side (screen up)
+    invertForwardBack: false, // default reversed: tilting far edge DOWN moves toward NEAR side (screen down)
     invertLeftRight: false
   };
   let smoothedX = 0, smoothedZ = 0;

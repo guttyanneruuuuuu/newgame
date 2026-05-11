@@ -599,9 +599,17 @@ BDR.game = (function() {
             if (aSlam && !bSlam && now > (b.invulUntil || 0)) {
               b.hp = Math.max(0, b.hp - dmg);
               b.invulUntil = now + (BDR.items ? BDR.items.cfg.invulMs : 800);
+              if (b.stars > 0) {
+                b.stars -= 1;
+                dropStarFromPlayer(b);
+              }
             } else if (bSlam && !aSlam && now > (a.invulUntil || 0)) {
               a.hp = Math.max(0, a.hp - dmg);
               a.invulUntil = now + (BDR.items ? BDR.items.cfg.invulMs : 800);
+              if (a.stars > 0) {
+                a.stars -= 1;
+                dropStarFromPlayer(a);
+              }
             }
 
             // Slam attacker pushes target much harder; receiver gets little kickback
