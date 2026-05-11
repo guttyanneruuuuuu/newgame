@@ -68,6 +68,11 @@ BDR.controls = (function() {
     return s * Math.pow(a, exp);
   }
 
+  function applyDeadZone(value, deadZone) {
+    if (Math.abs(value) < deadZone) return 0;
+    return value - Math.sign(value) * deadZone;
+  }
+
   function normalizeScreenAngle(angle) {
     const a = Number.isFinite(angle) ? angle : 0;
     const snapped = Math.round(a / 90) * 90;
@@ -75,7 +80,7 @@ BDR.controls = (function() {
   }
 
   function getScreenAngle() {
-    const byScreen = window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number'
+    const byScreen = typeof window.screen?.orientation?.angle === 'number'
       ? window.screen.orientation.angle
       : null;
     const byLegacy = typeof window.orientation === 'number' ? window.orientation : null;
@@ -115,8 +120,8 @@ BDR.controls = (function() {
 
     // dead zone
     const dz = GYRO.deadZone;
-    if (Math.abs(fb) < dz) fb = 0; else fb = fb - Math.sign(fb) * dz;
-    if (Math.abs(lr) < dz) lr = 0; else lr = lr - Math.sign(lr) * dz;
+    fb = applyDeadZone(fb, dz);
+    lr = applyDeadZone(lr, dz);
 
     let nxRaw = BDR.clamp(lr / GYRO.maxAngle, -1, 1);
     let nzRaw = BDR.clamp(fb / GYRO.maxAngle, -1, 1);
