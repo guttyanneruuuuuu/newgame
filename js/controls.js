@@ -7,6 +7,7 @@ window.BDR = window.BDR || {};
 BDR.controls = (function() {
   const state = {
     input: { x: 0, z: 0, jump: false, camX: 0, camY: 0 },
+    actions: { dashQueued: false, shootQueued: false },
     gyro: { enabled: false, calibrated: false, baseBeta: 0, baseGamma: 0 },
     keys: {},
     joystick: { active: false, x: 0, y: 0 },
@@ -17,7 +18,11 @@ BDR.controls = (function() {
   // ---------------- Keyboard ----------------
   window.addEventListener('keydown', (e) => {
     state.keys[e.key.toLowerCase()] = true;
-    if (e.code === 'Space') state.input.jump = true;
+    if (e.code === 'Space') {
+      state.input.jump = true;
+      state.actions.dashQueued = true;
+    }
+    if (e.key.toLowerCase() === 'e') state.actions.shootQueued = true;
   });
   window.addEventListener('keyup', (e) => {
     state.keys[e.key.toLowerCase()] = false;
@@ -45,16 +50,33 @@ BDR.controls = (function() {
   //   gamma > 0 = right side of phone tilts down.
   // Camera looks toward -Z (so "up on screen" = -Z world).
   const GYRO = {
-    deadZone: 2.5,         // bigger so resting hand doesn't drift
-    maxAngle: 18.0,        // tilt angle that maps to full input (smaller = quicker response)
-    smooth: 0.32,          // higher = snappier (was 0.22)
-    sensitivity: 1.25,     // overall multiplier (gain)
-    curve: 1.6,            // response curve exponent (>1 = gentler near 0, faster at extremes)
-    invertForwardBack: false, // tilting far edge DOWN should move UP on screen
+    deadZone: 1.2,          // small neutral zone; drift is handled by snap-to-zero below
+    maxAngle: 24.0,         // wider range so tilt control is less twitchy
+    smooth: 0.46,           // snappy enough for action, still filtered
+    sensitivity: 1.0,       // user-adjustable runtime gain
+    minSensitivity: 0.55,
+    maxSensitivity: 1.85,
+    curve: 1.22,            // easier fine control than the old steep curve
+    snapToZero: 0.035,      // kills tiny remaining drift after smoothing
+    invertForwardBack: false,
     invertLeftRight: false
   };
   let smoothedX = 0, smoothedZ = 0;
   let lastRawBeta = 0, lastRawGamma = 0;
+
+  function angleDelta(a, b) {
+    let d = a - b;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    return d;
+  }
+
+  function getScreenAngleRad() {
+    const raw = (screen.orientation && typeof screen.orientation.angle === 'number')
+      ? screen.orientation.angle
+      : (typeof window.orientation === 'number' ? window.orientation : 0);
+    return raw * Math.PI / 180;
+  }
 
   function applyCurve(v, exp) {
     // signed exponent curve: keeps sign, eases small inputs
@@ -76,35 +98,38 @@ BDR.controls = (function() {
       state.gyro.calibrated = true;
     }
 
-    let dBeta = beta - state.gyro.baseBeta;
-    let dGamma = gamma - state.gyro.baseGamma;
+    const dBeta = angleDelta(beta, state.gyro.baseBeta);
+    const dGamma = angleDelta(gamma, state.gyro.baseGamma);
 
-    // dead zone
-    const dz = GYRO.deadZone;
-    if (Math.abs(dBeta) < dz) dBeta = 0; else dBeta = dBeta - Math.sign(dBeta) * dz;
-    if (Math.abs(dGamma) < dz) dGamma = 0; else dGamma = dGamma - Math.sign(dGamma) * dz;
+    // Convert the device tilt into screen-space movement.
+    // Portrait baseline: right edge down => +X, far/top edge down => -Z (up on screen).
+    const a = getScreenAngleRad();
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const screenX = dGamma * cos - dBeta * sin;
+    const screenY = dGamma * sin + dBeta * cos;
 
-    let nxRaw = BDR.clamp(dGamma / GYRO.maxAngle, -1, 1);
-    let nzRaw = BDR.clamp(dBeta  / GYRO.maxAngle, -1, 1);
+    function normalizeTilt(deg) {
+      const dz = GYRO.deadZone;
+      if (Math.abs(deg) < dz) return 0;
+      return BDR.clamp((deg - Math.sign(deg) * dz) / GYRO.maxAngle, -1, 1);
+    }
 
-    // Curve so tiny tilts feel gentle and natural
+    let nxRaw = normalizeTilt(screenX);
+    let nzRaw = -normalizeTilt(screenY);
+
+    // Curve so tiny tilts are precise and bigger tilts still reach full speed.
     let nx = applyCurve(nxRaw, GYRO.curve) * GYRO.sensitivity;
     let nz = applyCurve(nzRaw, GYRO.curve) * GYRO.sensitivity;
     nx = BDR.clamp(nx, -1, 1);
     nz = BDR.clamp(nz, -1, 1);
 
     if (GYRO.invertLeftRight) nx = -nx;
-    // === Forward/back mapping (user requested fix) ===
-    // beta > 0 = far edge down. We want this to mean +Z world (forward into the screen).
-    // Camera looks toward -Z, so "up on screen" = -Z. To make far-edge-down translate to
-    // moving "up on screen", we need beta>0 -> -Z, i.e. invert nz. The previous build
-    // already inverted; users reported it still felt reversed because of phone orientation
-    // detection differences. We expose `invertForwardBack` and default to NOT inverting now.
     if (GYRO.invertForwardBack) nz = -nz;
 
-    // Smooth
     smoothedX = BDR.lerp(smoothedX, nx, GYRO.smooth);
     smoothedZ = BDR.lerp(smoothedZ, nz, GYRO.smooth);
+    if (Math.abs(smoothedX) < GYRO.snapToZero) smoothedX = 0;
+    if (Math.abs(smoothedZ) < GYRO.snapToZero) smoothedZ = 0;
   }
 
   function setupGyro() {
@@ -194,10 +219,17 @@ BDR.controls = (function() {
     window.addEventListener('mouseup', end);
   }
 
+  function isCameraDragTarget(e) {
+    const target = e.target;
+    if (!target) return false;
+    if (target.closest && target.closest('button, .touch-joystick, .gyro-card, .result-card')) return false;
+    return target.tagName === 'CANVAS' || target.id === 'screen-game';
+  }
+
   // ---------------- Camera Drag ----------------
   function setupCameraDrag() {
     window.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === 'CANVAS' || e.target.id === 'screen-game') {
+      if (isCameraDragTarget(e)) {
         state.drag.active = true;
         state.drag.lastX = e.clientX;
         state.drag.lastY = e.clientY;
@@ -217,7 +249,7 @@ BDR.controls = (function() {
     });
 
     window.addEventListener('touchstart', (e) => {
-      if (e.target.tagName === 'CANVAS' || e.target.id === 'screen-game') {
+      if (isCameraDragTarget(e)) {
         const t = e.touches[0];
         state.drag.active = true;
         state.drag.lastX = t.clientX;
@@ -256,6 +288,9 @@ BDR.controls = (function() {
     // Joystick overrides if active
     if (state.joystick.active) { ix = state.joystick.x; iz = state.joystick.y; }
 
+    const mag = Math.hypot(ix, iz);
+    if (mag > 1) { ix /= mag; iz /= mag; }
+
     state.input.x = ix;
     state.input.z = iz;
     // camX/camY are deltas, they should be consumed or decayed
@@ -269,12 +304,35 @@ BDR.controls = (function() {
     return { dx, dy };
   }
 
+  function queueDash() { state.actions.dashQueued = true; }
+  function queueShoot() { state.actions.shootQueued = true; }
+  function setGyroSensitivity(v) {
+    const next = BDR.clamp(Number(v) || 1, GYRO.minSensitivity, GYRO.maxSensitivity);
+    GYRO.sensitivity = next;
+    try { localStorage.setItem('bdr-gyro-sensitivity', String(next)); } catch (e) {}
+    return next;
+  }
+  function adjustGyroSensitivity(delta) {
+    return setGyroSensitivity(GYRO.sensitivity + delta);
+  }
+  function consumeActions() {
+    const out = { dash: state.actions.dashQueued, shoot: state.actions.shootQueued };
+    state.actions.dashQueued = false;
+    state.actions.shootQueued = false;
+    return out;
+  }
+
   // Allow runtime toggling of forward/back inversion (user fine-tune button)
   function toggleForwardBackInvert() {
     GYRO.invertForwardBack = !GYRO.invertForwardBack;
     smoothedX = 0; smoothedZ = 0;
     return GYRO.invertForwardBack;
   }
+
+  try {
+    const savedSensitivity = parseFloat(localStorage.getItem('bdr-gyro-sensitivity'));
+    if (!Number.isNaN(savedSensitivity)) setGyroSensitivity(savedSensitivity);
+  } catch (e) {}
 
   return {
     state,
@@ -283,6 +341,11 @@ BDR.controls = (function() {
     setupJoystick,
     setupCameraDrag,
     consumeCamDelta,
+    queueDash,
+    queueShoot,
+    consumeActions,
+    setGyroSensitivity,
+    adjustGyroSensitivity,
     recalibrate,
     toggleForwardBackInvert,
     GYRO

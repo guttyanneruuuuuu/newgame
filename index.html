@@ -56,7 +56,7 @@
       </div>
 
       <div class="title-foot">
-        <span>v1.0 · ジャイロ対応 · スマホ推奨</span>
+        <span>v1.3 · ジャイロ改善 · 当たり判定強化</span>
       </div>
     </div>
   </div>
@@ -108,13 +108,14 @@
     <div class="title-card narrow">
       <h2>あそびかた</h2>
       <ul class="howto-list">
-        <li><b>目的:</b> 3D迷路を転がってゴールの穴に最初に落ちた人の勝ち！</li>
+        <li><b>目的:</b> 3つのスターを集めるとゴールの穴が開きます。スター争奪と妨害を制して先にゴール！</li>
         <li><b>ジャイロ:</b> スマホの<b>奥(上端)を下げる</b>と画面の<b>上</b>へ進みます。逆に感じたらHUDの「FLIP」ボタンで反転できます。</li>
+        <li><b>感度:</b> HUDの「− / ＋」でジャイロ感度を0.55〜1.85倍に調整できます。ふらつく場合は下げ、反応が鈍い場合は上げてください。</li>
         <li><b>キャリブレ:</b> 「RESET」ボタンで今の姿勢を「真ん中」に再設定。</li>
         <li><b>PCの方:</b> WASD / 矢印キーで移動。スペースで<b>ダッシュ体当たり</b>。</li>
-        <li><b>視点:</b> 固定方位の三人称視点（カメラは回らない）。</li>
-        <li><b>妨害:</b> 体当たり＆DASHで他のボールを弾けます。DASH中の体当たり=<b>ボディスラム</b>でさらに強力！</li>
-        <li><b>ステージ:</b> 大型25×19の長方形マップ。スピナー／バネ床／ぬかるみ／押し出し／<b>氷</b>／<b>動く壁</b>／<b>レーザー</b>／<b>テレポート</b>。</li>
+        <li><b>視点:</b> 画面右側をドラッグ（PCはマウスドラッグ）でカメラを回転。操作方向も視点に追従します。</li>
+        <li><b>妨害:</b> 体当たり＆DASHで他のボールを弾けます。SHOOT（PCはE）で弾を撃ち、相手のスターを落とせます。</li>
+        <li><b>ステージ:</b> 大型25×19の長方形マップ。スピナー／バネ床／ぬかるみ／押し出し／<b>氷</b>／<b>動く壁</b>／<b>レーザー</b>／<b>テレポート</b>／<b>地雷</b>／<b>バンパー</b>。</li>
         <li><b>定員:</b> 1部屋6人まで。CPUで埋めて遊ぶこともできるよ。</li>
       </ul>
       <button class="btn btn-primary" id="btn-howto-back">OK</button>
@@ -129,30 +130,30 @@
         <div id="hud-rank" class="hud-rank">1 / 6</div>
         <div id="hud-time" class="hud-time">00:00</div>
       </div>
-      <div class="hud-goal" id="hud-goal">
-        <span class="hud-goal-arrow" id="hud-goal-arrow">↑</span>
-        <span class="hud-goal-dist" id="hud-goal-dist">--</span>
-      </div>
+      <div class="hud-stars" id="hud-stars">★ 0 / 3</div>
       <div class="hud-speed" id="hud-speed">
         <div class="hud-speed-bar"><div class="hud-speed-fill" id="hud-speed-fill"></div></div>
         <span id="hud-speed-val">0</span>
       </div>
       <div class="hud-toast" id="hud-toast"></div>
-      <div class="hud-mini" id="hud-mini">
-        <canvas id="mini-canvas"></canvas>
-      </div>
       <div class="hud-leaderboard" id="hud-leaderboard"></div>
       <button class="hud-pause" id="btn-pause">⏸</button>
       <button class="hud-recal" id="btn-recal" title="ジャイロ基準を今の姿勢にリセット">RESET</button>
       <button class="hud-flip" id="btn-flip" title="前後の傾きを反転">FLIP</button>
-    <button class="hud-dash" id="btn-dash" title="ダッシュ体当たり">
-      <span class="hud-dash-label">DASH</span>
-      <svg class="hud-dash-cool" viewBox="0 0 36 36">
-        <circle cx="18" cy="18" r="16" stroke="rgba(255,255,255,0.6)" stroke-width="3" fill="none"/>
-        <circle id="hud-dash-arc" cx="18" cy="18" r="16" stroke="#ff7a59" stroke-width="3" fill="none"
-                stroke-dasharray="100.53" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
-      </svg>
-    </button>
+      <div class="hud-sens" id="hud-sens" title="ジャイロ感度">
+        <button id="btn-sens-down" type="button">−</button>
+        <span id="hud-sens-val">1.00x</span>
+        <button id="btn-sens-up" type="button">＋</button>
+      </div>
+      <button class="hud-shoot" id="btn-shoot" title="ショット攻撃">SHOOT</button>
+      <button class="hud-dash" id="btn-dash" title="ダッシュ体当たり">
+        <span class="hud-dash-label">DASH</span>
+        <svg class="hud-dash-cool" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" stroke="rgba(255,255,255,0.6)" stroke-width="3" fill="none"/>
+          <circle id="hud-dash-arc" cx="18" cy="18" r="16" stroke="#ff7a59" stroke-width="3" fill="none"
+                  stroke-dasharray="100.53" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Gyro permission overlay (iOS) -->

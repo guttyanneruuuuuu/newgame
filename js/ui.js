@@ -329,15 +329,45 @@ window.BDR = window.BDR || {};
     const dashArc = $('hud-dash-arc');
     const arcLen = 100.53;
     if (dashBtn) {
-      dashBtn.onclick = () => BDR.game.tryLocalDash && BDR.game.tryLocalDash();
+      dashBtn.onclick = () => BDR.controls.queueDash && BDR.controls.queueDash();
       // Spacebar dash
       window.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && $('screen-game').classList.contains('visible')) {
           e.preventDefault();
-          BDR.game.tryLocalDash && BDR.game.tryLocalDash();
+          BDR.controls.queueDash && BDR.controls.queueDash();
         }
       });
     }
+    const shootBtn = $('btn-shoot');
+    if (shootBtn) {
+      shootBtn.onclick = () => BDR.controls.queueShoot && BDR.controls.queueShoot();
+    }
+    window.addEventListener('keydown', (e) => {
+      if ($('screen-game').classList.contains('visible') && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        BDR.controls.queueShoot && BDR.controls.queueShoot();
+      }
+    });
+    const sensVal = $('hud-sens-val');
+    const updateSensitivityLabel = () => {
+      if (sensVal && BDR.controls.GYRO) sensVal.textContent = BDR.controls.GYRO.sensitivity.toFixed(2) + 'x';
+    };
+    const bumpSensitivity = (delta) => {
+      if (BDR.controls.adjustGyroSensitivity) BDR.controls.adjustGyroSensitivity(delta);
+      updateSensitivityLabel();
+      const toast = $('hud-toast');
+      if (toast && BDR.controls.GYRO) {
+        toast.textContent = `感度 ${BDR.controls.GYRO.sensitivity.toFixed(2)}x`;
+        toast.classList.add('show');
+        clearTimeout(ui._toastTo);
+        ui._toastTo = setTimeout(() => toast.classList.remove('show'), 900);
+      }
+    };
+    const sensDown = $('btn-sens-down');
+    const sensUp = $('btn-sens-up');
+    if (sensDown) sensDown.onclick = () => bumpSensitivity(-0.1);
+    if (sensUp) sensUp.onclick = () => bumpSensitivity(0.1);
+    updateSensitivityLabel();
     // Keyboard 'R' to recalibrate gyro (handy when testing on phones via remote)
     window.addEventListener('keydown', (e) => {
       if ($('screen-game').classList.contains('visible') && (e.key === 'r' || e.key === 'R')) {
@@ -373,19 +403,12 @@ window.BDR = window.BDR || {};
         if (ratio >= 1) dashBtn.classList.remove('cooling');
         else dashBtn.classList.add('cooling');
       }
-      // Goal arrow / distance
-      if (BDR.game.getGoalInfo) {
-        const gi = BDR.game.getGoalInfo();
-        const arrow = $('hud-goal-arrow');
-        const dist = $('hud-goal-dist');
-        if (arrow && dist) {
-          if (gi.finished) {
-            arrow.style.transform = 'rotate(0deg)';
-            dist.textContent = 'GOAL!';
-          } else {
-            arrow.style.transform = `rotate(${gi.angle}rad)`;
-            dist.textContent = Math.round(gi.distance) + 'm';
-          }
+      // Star gate status (minimap and goal direction are intentionally hidden).
+      if (BDR.game.getMyStars) {
+        const starEl = $('hud-stars');
+        if (starEl) {
+          const stars = BDR.game.getMyStars();
+          starEl.textContent = stars >= 3 ? '★ 3 / 3  GOAL OPEN' : `★ ${stars} / 3`;
         }
       }
       // Speed meter

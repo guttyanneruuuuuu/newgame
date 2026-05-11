@@ -182,6 +182,17 @@ BDR.generateMaze = function(seed = Date.now(), width = 25, height = 19) {
     const c = pickFreeCell(); if (!c) continue;
     hazards.push({ type: 'laser', x: c.x, y: c.y, axis: rng() < 0.5 ? 'x' : 'z', period: 1800 + rng() * 1200, phase: rng() * 2000 });
   }
+  // Proximity mines: explode and scatter nearby players.
+  for (let i = 0; i < 8; i++) {
+    const c = pickFreeCell(); if (!c) continue;
+    hazards.push({ type: 'mine', x: c.x, y: c.y });
+  }
+  // Rubber bumpers: permanent pinball-style obstacles.
+  for (let i = 0; i < 7; i++) {
+    const c = pickFreeCell(); if (!c) continue;
+    hazards.push({ type: 'bumper', x: c.x, y: c.y });
+  }
+
   // Teleport pads (pair) — TP from A to B, both cells reserved
   for (let i = 0; i < 2; i++) {
     const a = pickFreeCell(); if (!a) continue;
@@ -475,6 +486,30 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
         x: hz.x, y: hz.y, axis: hz.axis,
         period: hz.period, phase: hz.phase, length
       });
+    } else if (hz.type === 'mine') {
+      const mine = new THREE.Mesh(
+        new THREE.CylinderGeometry(cellSize * 0.25, cellSize * 0.32, 0.18, 18),
+        new THREE.MeshStandardMaterial({ color: 0x2f3542, emissive: 0xff4757, emissiveIntensity: 0.35, roughness: 0.45 })
+      );
+      mine.position.set(cx, 0.10, cz);
+      group.add(mine);
+      const warn = new THREE.Mesh(
+        new THREE.RingGeometry(cellSize * 0.34, cellSize * 0.40, 28),
+        new THREE.MeshBasicMaterial({ color: 0xff4757, side: THREE.DoubleSide, transparent: true, opacity: 0.45, depthWrite: false })
+      );
+      warn.rotation.x = -Math.PI / 2;
+      warn.position.set(cx, 0.15, cz);
+      group.add(warn);
+      hazardMeshes.push({ type: 'mine', mesh: mine, warn, x: hz.x, y: hz.y, cooldownUntil: 0 });
+    } else if (hz.type === 'bumper') {
+      const bumper = new THREE.Mesh(
+        new THREE.CylinderGeometry(cellSize * 0.25, cellSize * 0.25, 1.2, 24),
+        new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0x6d28d9, emissiveIntensity: 0.32, roughness: 0.25 })
+      );
+      bumper.position.set(cx, 0.6, cz);
+      bumper.castShadow = true;
+      group.add(bumper);
+      hazardMeshes.push({ type: 'bumper', mesh: bumper, x: hz.x, y: hz.y });
     } else if (hz.type === 'tp') {
       const color = TP_COLORS[hz.colorIdx % TP_COLORS.length];
       const pad = new THREE.Mesh(
@@ -570,6 +605,7 @@ BDR.buildMazeMeshes = function(maze, opts = {}) {
     goalPos: new THREE.Vector3(goalCx, 0, goalCz),
     floorMesh: floor,
     hazardMeshes,
+    hole,
     flag,
     pillar,
     ring
