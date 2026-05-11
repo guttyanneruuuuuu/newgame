@@ -329,15 +329,25 @@ window.BDR = window.BDR || {};
     const dashArc = $('hud-dash-arc');
     const arcLen = 100.53;
     if (dashBtn) {
-      dashBtn.onclick = () => BDR.game.tryLocalDash && BDR.game.tryLocalDash();
+      dashBtn.onclick = () => BDR.controls.queueDash && BDR.controls.queueDash();
       // Spacebar dash
       window.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && $('screen-game').classList.contains('visible')) {
           e.preventDefault();
-          BDR.game.tryLocalDash && BDR.game.tryLocalDash();
+          BDR.controls.queueDash && BDR.controls.queueDash();
         }
       });
     }
+    const shootBtn = $('btn-shoot');
+    if (shootBtn) {
+      shootBtn.onclick = () => BDR.controls.queueShoot && BDR.controls.queueShoot();
+    }
+    window.addEventListener('keydown', (e) => {
+      if ($('screen-game').classList.contains('visible') && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        BDR.controls.queueShoot && BDR.controls.queueShoot();
+      }
+    });
     // Keyboard 'R' to recalibrate gyro (handy when testing on phones via remote)
     window.addEventListener('keydown', (e) => {
       if ($('screen-game').classList.contains('visible') && (e.key === 'r' || e.key === 'R')) {
@@ -373,19 +383,12 @@ window.BDR = window.BDR || {};
         if (ratio >= 1) dashBtn.classList.remove('cooling');
         else dashBtn.classList.add('cooling');
       }
-      // Goal arrow / distance
-      if (BDR.game.getGoalInfo) {
-        const gi = BDR.game.getGoalInfo();
-        const arrow = $('hud-goal-arrow');
-        const dist = $('hud-goal-dist');
-        if (arrow && dist) {
-          if (gi.finished) {
-            arrow.style.transform = 'rotate(0deg)';
-            dist.textContent = 'GOAL!';
-          } else {
-            arrow.style.transform = `rotate(${gi.angle}rad)`;
-            dist.textContent = Math.round(gi.distance) + 'm';
-          }
+      // Star gate status (minimap and goal direction are intentionally hidden).
+      if (BDR.game.getMyStars) {
+        const starEl = $('hud-stars');
+        if (starEl) {
+          const stars = BDR.game.getMyStars();
+          starEl.textContent = stars >= 3 ? '★ 3 / 3  GOAL OPEN' : `★ ${stars} / 3`;
         }
       }
       // Speed meter
