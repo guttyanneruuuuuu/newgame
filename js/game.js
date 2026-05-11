@@ -28,7 +28,8 @@ BDR.game = (function() {
     cameraLookAhead: 0.0,
     fov: 80,
     pvpKnockback: 7.5,
-    slamMultiplier: 1.9    // dashing into someone hits ~2x harder
+    slamMultiplier: 1.9,
+    maxHP: 100
   };
 
   let renderer, scene, camera;
@@ -57,6 +58,7 @@ BDR.game = (function() {
   let dashActiveUntil = {};   // when dash effect lingers (for body-slam window)
   // Mini-map (2D radar) canvas
   let miniCanvas = null, miniCtx = null;
+  let camYaw = 0, camPitch = 0.4; // Camera rotation state
 
   function init(container) {
     const canvas = document.getElementById('game-canvas');
@@ -257,7 +259,9 @@ BDR.game = (function() {
         respawnTimer: 0,
         lastBumpAt: 0,
         onIce: false,
-        lastTpAt: 0
+        lastTpAt: 0,
+        hp: cfg.maxHP,
+        invulUntil: 0
       });
     }
   }
@@ -514,6 +518,16 @@ BDR.game = (function() {
             const aSlam = (dashActiveUntil[a.id]||0) > now;
             const bSlam = (dashActiveUntil[b.id]||0) > now;
             if (aSlam || bSlam) power *= cfg.slamMultiplier;
+
+            // Damage logic
+            const dmg = BDR.items ? BDR.items.cfg.slamDamage : 20;
+            if (aSlam && !bSlam && now > (b.invulUntil || 0)) {
+              b.hp = Math.max(0, b.hp - dmg);
+              b.invulUntil = now + (BDR.items ? BDR.items.cfg.invulMs : 800);
+            } else if (bSlam && !aSlam && now > (a.invulUntil || 0)) {
+              a.hp = Math.max(0, a.hp - dmg);
+              a.invulUntil = now + (BDR.items ? BDR.items.cfg.invulMs : 800);
+            }
 
             // Slam attacker pushes target much harder; receiver gets little kickback
             if (aSlam && !bSlam) {
@@ -839,6 +853,21 @@ BDR.game = (function() {
         p.label.position.set(p.body.position.x, p.body.position.y + cfg.ballRadius + 0.95, p.body.position.z);
         p.label.visible = !p.finished;
       }
+      // HP Bar logic (simple visual feedback)
+      if (p.hp < cfg.maxHP && !p.finished) {
+        if (!p.hpBar) {
+          const barGeo = new THREE.PlaneGeometry(1.2, 0.12);
+          const barMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+          p.hpBar = new THREE.Mesh(barGeo, barMat);
+          scene.add(p.hpBar);
+        }
+        p.hpBar.position.set(p.body.position.x, p.body.position.y + cfg.ballRadius + 0.5, p.body.position.z);
+        p.hpBar.scale.x = p.hp / cfg.maxHP;
+        p.hpBar.quaternion.copy(camera.quaternion);
+        p.hpBar.visible = true;
+      } else if (p.hpBar) {
+        p.hpBar.visible = false;
+      }
     }
 
     if (!isHost && lastNetSnap) applySnapshot(lastNetSnap);
@@ -873,15 +902,29 @@ BDR.game = (function() {
     // ---- Camera ----
     const me = players.find(pp => pp.isMe);
     if (me) {
+      const camDelta = BDR.controls.consumeCamDelta();
+      camYaw -= camDelta.dx * 0.005;
+      camPitch = Math.max(0.1, Math.min(1.2, camPitch + camDelta.dy * 0.005));
+
       const target = new THREE.Vector3(me.body.position.x, me.body.position.y, me.body.position.z);
       const fallOffset = Math.min(0, me.body.position.y) * 0.6;
-      const desired = new THREE.Vector3(
-        target.x,
-        Math.max(target.y + cfg.cameraHeight + fallOffset, -2),
-        target.z + cfg.cameraDist
-      );
+      
+      const dist = cfg.cameraDist;
+      const cx = target.x + Math.sin(camYaw) * Math.cos(camPitch) * dist;
+      const cz = target.z + Math.cos(camYaw) * Math.cos(camPitch) * dist;
+      const cy = Math.max(target.y + Math.sin(camPitch) * dist + fallOffset, -2);
+
+      const desired = new THREE.Vector3(cx, cy, cz);
       camera.position.lerp(desired, 0.20);
       camera.lookAt(new THREE.Vector3(target.x, target.y + 0.3, target.z));
+
+      // Adjust movement input based on camera yaw
+      const input = BDR.controls.state.input;
+      const rawX = input.x, rawZ = input.z;
+      const cosY = Math.cos(camYaw), sinY = Math.sin(camYaw);
+      // Rotate input vector by -camYaw
+      input.x = rawX * cosY - rawZ * sinY;
+      input.z = rawX * sinY + rawZ * cosY;
     }
 
     // Mini-map render
@@ -963,7 +1006,8 @@ BDR.game = (function() {
         vx: p.body.velocity.x, vy: p.body.velocity.y, vz: p.body.velocity.z,
         finished: p.finished,
         place: p.place,
-        finishTime: p.finishTime
+        finishTime: p.finishTime,
+        hp: p.hp
       })),
       powerups: powerups.map(pu => pu.taken ? 1 : 0)
     };
@@ -993,6 +1037,7 @@ BDR.game = (function() {
         p.body.position.z = BDR.lerp(p.body.position.z, sp.z, 0.4);
         p.body.velocity.set(sp.vx, sp.vy, sp.vz);
       }
+      p.hp = sp.hp; // Sync HP
       if (sp.finished && !p.finished) {
         p.finished = true;
         p.place = sp.place;

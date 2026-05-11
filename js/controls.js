@@ -6,10 +6,11 @@ window.BDR = window.BDR || {};
 
 BDR.controls = (function() {
   const state = {
-    input: { x: 0, z: 0, jump: false },
+    input: { x: 0, z: 0, jump: false, camX: 0, camY: 0 },
     gyro: { enabled: false, calibrated: false, baseBeta: 0, baseGamma: 0 },
     keys: {},
     joystick: { active: false, x: 0, y: 0 },
+    drag: { active: false, lastX: 0, lastY: 0 },
     mode: 'auto' // 'gyro' | 'touch' | 'keyboard'
   };
 
@@ -193,6 +194,51 @@ BDR.controls = (function() {
     window.addEventListener('mouseup', end);
   }
 
+  // ---------------- Camera Drag ----------------
+  function setupCameraDrag() {
+    window.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'CANVAS' || e.target.id === 'screen-game') {
+        state.drag.active = true;
+        state.drag.lastX = e.clientX;
+        state.drag.lastY = e.clientY;
+      }
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!state.drag.active) return;
+      const dx = e.clientX - state.drag.lastX;
+      const dy = e.clientY - state.drag.lastY;
+      state.input.camX = dx;
+      state.input.camY = dy;
+      state.drag.lastX = e.clientX;
+      state.drag.lastY = e.clientY;
+    });
+    window.addEventListener('mouseup', () => {
+      state.drag.active = false;
+    });
+
+    window.addEventListener('touchstart', (e) => {
+      if (e.target.tagName === 'CANVAS' || e.target.id === 'screen-game') {
+        const t = e.touches[0];
+        state.drag.active = true;
+        state.drag.lastX = t.clientX;
+        state.drag.lastY = t.clientY;
+      }
+    }, { passive: false });
+    window.addEventListener('touchmove', (e) => {
+      if (!state.drag.active) return;
+      const t = e.touches[0];
+      const dx = t.clientX - state.drag.lastX;
+      const dy = t.clientY - state.drag.lastY;
+      state.input.camX = dx;
+      state.input.camY = dy;
+      state.drag.lastX = t.clientX;
+      state.drag.lastY = t.clientY;
+    }, { passive: false });
+    window.addEventListener('touchend', () => {
+      state.drag.active = false;
+    });
+  }
+
   // ---------------- Update loop ----------------
   function update() {
     let ix = 0, iz = 0;
@@ -212,6 +258,15 @@ BDR.controls = (function() {
 
     state.input.x = ix;
     state.input.z = iz;
+    // camX/camY are deltas, they should be consumed or decayed
+  }
+
+  function consumeCamDelta() {
+    const dx = state.input.camX;
+    const dy = state.input.camY;
+    state.input.camX = 0;
+    state.input.camY = 0;
+    return { dx, dy };
   }
 
   // Allow runtime toggling of forward/back inversion (user fine-tune button)
@@ -226,6 +281,8 @@ BDR.controls = (function() {
     update,
     requestGyroPermission,
     setupJoystick,
+    setupCameraDrag,
+    consumeCamDelta,
     recalibrate,
     toggleForwardBackInvert,
     GYRO

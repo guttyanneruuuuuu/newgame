@@ -239,6 +239,7 @@ window.BDR = window.BDR || {};
 
     // Joystick setup if needed
     BDR.controls.setupJoystick($('touch-joystick'));
+    BDR.controls.setupCameraDrag();
 
     // Schedule countdown
     const startAt = opts.startedAt || (Date.now() + 4000);

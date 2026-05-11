@@ -18,7 +18,10 @@ BDR.items = (function() {
     projRangeCells: 4,
     dashImpulse: 8.5,
     dashCooldownMs: 1800,
-    bumpKnockback: 9
+    bumpKnockback: 9,
+    projDamage: 15,
+    slamDamage: 25,
+    invulMs: 800
   };
 
   const pool = []; // active projectiles
@@ -86,16 +89,29 @@ BDR.items = (function() {
         const dz = p.body.position.z - pj.body.position.z;
         const r = BDR.game.cfg.ballRadius + cfg.projRadius;
         if (dx*dx + dy*dy + dz*dz < r*r * 1.2) {
-          // knockback
-          const d = Math.hypot(dx, dz) || 1;
-          const kx = -dx / d, kz = -dz / d;
-          // Wait — kx should be FROM projectile TO player direction
-          const ax = dx / d, az = dz / d;
-          p.body.velocity.x += ax * cfg.projKnockback;
-          p.body.velocity.z += az * cfg.projKnockback;
-          p.body.velocity.y += 4;
+          if (now > (p.invulUntil || 0)) {
+            // damage
+            p.hp = Math.max(0, p.hp - cfg.projDamage);
+            p.invulUntil = now + cfg.invulMs;
+            
+            // knockback
+            const d = Math.hypot(dx, dz) || 1;
+            const ax = dx / d, az = dz / d;
+            p.body.velocity.x += ax * cfg.projKnockback;
+            p.body.velocity.z += az * cfg.projKnockback;
+            p.body.velocity.y += 4;
+            
+            if (p.hp <= 0) {
+              // Respawn logic
+              p.hp = BDR.game.cfg.maxHP;
+              const sc = p.startCell || {x:0, y:0};
+              p.body.position.set(sc.x * BDR.game.cfg.cellSize, 2, sc.y * BDR.game.cfg.cellSize);
+              p.body.velocity.set(0,0,0);
+              if (BDR.sound && p.isMe) BDR.sound.bump(); 
+            }
+          }
+          
           pj.hit = true;
-          // small flash
           spawnHitFlash(scene, p.body.position, pj.color);
           break;
         }
