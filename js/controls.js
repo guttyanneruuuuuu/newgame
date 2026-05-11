@@ -7,6 +7,7 @@ window.BDR = window.BDR || {};
 BDR.controls = (function() {
   const state = {
     input: { x: 0, z: 0, jump: false, camX: 0, camY: 0 },
+    actions: { dashQueued: false, shootQueued: false },
     gyro: { enabled: false, calibrated: false, baseBeta: 0, baseGamma: 0 },
     keys: {},
     joystick: { active: false, x: 0, y: 0 },
@@ -17,7 +18,11 @@ BDR.controls = (function() {
   // ---------------- Keyboard ----------------
   window.addEventListener('keydown', (e) => {
     state.keys[e.key.toLowerCase()] = true;
-    if (e.code === 'Space') state.input.jump = true;
+    if (e.code === 'Space') {
+      state.input.jump = true;
+      state.actions.dashQueued = true;
+    }
+    if (e.key.toLowerCase() === 'e') state.actions.shootQueued = true;
   });
   window.addEventListener('keyup', (e) => {
     state.keys[e.key.toLowerCase()] = false;
@@ -194,10 +199,17 @@ BDR.controls = (function() {
     window.addEventListener('mouseup', end);
   }
 
+  function isCameraDragTarget(e) {
+    const target = e.target;
+    if (!target) return false;
+    if (target.closest && target.closest('button, .touch-joystick, .gyro-card, .result-card')) return false;
+    return target.tagName === 'CANVAS' || target.id === 'screen-game';
+  }
+
   // ---------------- Camera Drag ----------------
   function setupCameraDrag() {
     window.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === 'CANVAS' || e.target.id === 'screen-game') {
+      if (isCameraDragTarget(e)) {
         state.drag.active = true;
         state.drag.lastX = e.clientX;
         state.drag.lastY = e.clientY;
@@ -217,7 +229,7 @@ BDR.controls = (function() {
     });
 
     window.addEventListener('touchstart', (e) => {
-      if (e.target.tagName === 'CANVAS' || e.target.id === 'screen-game') {
+      if (isCameraDragTarget(e)) {
         const t = e.touches[0];
         state.drag.active = true;
         state.drag.lastX = t.clientX;
@@ -269,6 +281,15 @@ BDR.controls = (function() {
     return { dx, dy };
   }
 
+  function queueDash() { state.actions.dashQueued = true; }
+  function queueShoot() { state.actions.shootQueued = true; }
+  function consumeActions() {
+    const out = { dash: state.actions.dashQueued, shoot: state.actions.shootQueued };
+    state.actions.dashQueued = false;
+    state.actions.shootQueued = false;
+    return out;
+  }
+
   // Allow runtime toggling of forward/back inversion (user fine-tune button)
   function toggleForwardBackInvert() {
     GYRO.invertForwardBack = !GYRO.invertForwardBack;
@@ -283,6 +304,9 @@ BDR.controls = (function() {
     setupJoystick,
     setupCameraDrag,
     consumeCamDelta,
+    queueDash,
+    queueShoot,
+    consumeActions,
     recalibrate,
     toggleForwardBackInvert,
     GYRO

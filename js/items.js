@@ -14,12 +14,12 @@ BDR.items = (function() {
     projLifeMs: 4000,
     projSpeed: 9.5,
     projKnockback: 12,
-    projCooldownMs: 2200,    // CPUs fire at this rate when within range
+    projCooldownMs: 1200,    // CPUs fire at this rate when within range
     projRangeCells: 4,
     dashImpulse: 8.5,
     dashCooldownMs: 1800,
     bumpKnockback: 9,
-    projDamage: 15,
+    projDamage: 20,
     slamDamage: 25,
     invulMs: 800
   };
@@ -90,9 +90,13 @@ BDR.items = (function() {
         const r = BDR.game.cfg.ballRadius + cfg.projRadius;
         if (dx*dx + dy*dy + dz*dz < r*r * 1.2) {
           if (now > (p.invulUntil || 0)) {
-            // damage
+            // damage + steal pressure: a clean hit makes the target drop one collected star.
             p.hp = Math.max(0, p.hp - cfg.projDamage);
             p.invulUntil = now + cfg.invulMs;
+            if (p.stars > 0) {
+              p.stars -= 1;
+              if (BDR.game && BDR.game.dropStarFromPlayer) BDR.game.dropStarFromPlayer(p);
+            }
             
             // knockback
             const d = Math.hypot(dx, dz) || 1;

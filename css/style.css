@@ -715,3 +715,41 @@ body::before {
 @media (orientation: landscape) and (max-height: 480px) {
   .title-card { max-height: 95vh; }
 }
+
+
+/* v1.2: no minimap / no goal arrow, add combat and star HUD */
+.hud-mini, .hud-goal { display: none !important; }
+.hud-stars {
+  position: absolute;
+  top: calc(var(--safe-top) + 50px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 24, 36, 0.86);
+  color: #ffd166;
+  border: 2px solid rgba(255, 209, 102, 0.85);
+  padding: 7px 14px;
+  border-radius: 16px;
+  font-weight: 900;
+  font-size: 16px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.hud-shoot {
+  position: absolute;
+  right: 94px;
+  bottom: calc(var(--safe-bottom) + 28px);
+  width: 78px;
+  height: 78px;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff4b8, #ffd166 45%, #ff9f43);
+  color: #3b2400;
+  font-weight: 1000;
+  box-shadow: 0 8px 22px rgba(255,159,67,0.35), inset 0 -5px 10px rgba(0,0,0,0.16);
+  pointer-events: auto;
+}
+.hud-shoot:active { transform: scale(0.94); }
+.hud-shoot.cooling { filter: grayscale(0.8); opacity: 0.64; }
+@media (max-width: 520px) {
+  .hud-shoot { right: 88px; width: 70px; height: 70px; font-size: 12px; }
+}

@@ -29,7 +29,8 @@ BDR.game = (function() {
     fov: 80,
     pvpKnockback: 7.5,
     slamMultiplier: 1.9,
-    maxHP: 100
+    maxHP: 100,
+    starsToOpenGoal: 3
   };
 
   let renderer, scene, camera;
@@ -53,11 +54,10 @@ BDR.game = (function() {
   let resetCallback = null;
   let powerups = [];
   let projectiles = [];
+  let goalOpen = false;
   let lastShotAt = {};
   let lastDashAt = {};
   let dashActiveUntil = {};   // when dash effect lingers (for body-slam window)
-  // Mini-map (2D radar) canvas
-  let miniCanvas = null, miniCtx = null;
   let camYaw = 0, camPitch = 0.4; // Camera rotation state
 
   function init(container) {
@@ -100,13 +100,6 @@ BDR.game = (function() {
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // Init mini-map
-    miniCanvas = document.getElementById('mini-canvas');
-    if (miniCanvas) {
-      miniCanvas.width = 220;
-      miniCanvas.height = 220;
-      miniCtx = miniCanvas.getContext('2d');
-    }
   }
 
   function buildPhysics() {
@@ -261,7 +254,8 @@ BDR.game = (function() {
         onIce: false,
         lastTpAt: 0,
         hp: cfg.maxHP,
-        invulUntil: 0
+        invulUntil: 0,
+        stars: 0
       });
     }
   }
@@ -279,16 +273,55 @@ BDR.game = (function() {
         attempts++;
       } while ((tried.has(x + ',' + y) || (x === maze.goalCell.x && y === maze.goalCell.y)) && attempts < 25);
       tried.add(x + ',' + y);
-      const geo = new THREE.TorusGeometry(0.55, 0.18, 12, 24);
+      const geo = new THREE.IcosahedronGeometry(0.62, 0);
       const mat = new THREE.MeshStandardMaterial({
-        color: 0xffd166, emissive: 0xffae00, emissiveIntensity: 0.6, roughness: 0.3
+        color: 0xffd166, emissive: 0xffae00, emissiveIntensity: 0.9, roughness: 0.28, metalness: 0.12
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x * cfg.cellSize, 0.6, y * cfg.cellSize);
       mesh.rotation.x = Math.PI / 2;
       scene.add(mesh);
-      powerups.push({ mesh, cellX: x, cellY: y, taken: false, type: 'boost' });
+      powerups.push({ mesh, cellX: x, cellY: y, taken: false, type: 'star' });
     }
+  }
+
+
+  function updateGoalVisuals() {
+    if (!mazeData) return;
+    const open = goalOpen;
+    if (mazeData.hole) mazeData.hole.material.color.setHex(open ? 0x111122 : 0x4b5563);
+    if (mazeData.ring) {
+      mazeData.ring.material.color.setHex(open ? 0xffd166 : 0x9ca3af);
+      mazeData.ring.material.opacity = open ? 0.85 : 0.28;
+    }
+    if (mazeData.pillar) mazeData.pillar.visible = open;
+    if (mazeData.flag) mazeData.flag.visible = open;
+  }
+
+  function createStarPickup(x, z) {
+    const geo = new THREE.IcosahedronGeometry(0.62, 0);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffd166, emissive: 0xffae00, emissiveIntensity: 0.9, roughness: 0.28, metalness: 0.12
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.75, z);
+    scene.add(mesh);
+    return { mesh, cellX: Math.round(x / cfg.cellSize), cellY: Math.round(z / cfg.cellSize), taken: false, type: 'star' };
+  }
+
+  function dropStarFromPlayer(p) {
+    if (!p || !scene) return;
+    const jitter = (Math.random() - 0.5) * cfg.cellSize * 0.7;
+    const x = p.body.position.x + jitter;
+    const z = p.body.position.z - jitter;
+    powerups.push(createStarPickup(x, z));
+    goalOpen = false;
+    updateGoalVisuals();
+  }
+
+  function getMyStars() {
+    const me = players.find(pp => pp.isMe);
+    return me ? me.stars || 0 : 0;
   }
 
   // ---------- Public API ----------
@@ -324,6 +357,7 @@ BDR.game = (function() {
     lastShotAt = {};
     lastDashAt = {};
     dashActiveUntil = {};
+    goalOpen = false;
 
     // Build maze
     maze = BDR.generateMaze(mazeSeed, cfg.mazeW, cfg.mazeH);
@@ -339,6 +373,7 @@ BDR.game = (function() {
 
     // Powerups
     spawnPowerups();
+    updateGoalVisuals();
 
     finishedCount = 0;
     raceStartedAt = 0;
@@ -449,33 +484,73 @@ BDR.game = (function() {
     lastShotAt[cpu.id] = now;
   }
 
+  function cameraRelativeInput(input, yaw = camYaw) {
+    const rawX = input.x || 0, rawZ = input.z || 0;
+    const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+    return {
+      x: rawX * cosY - rawZ * sinY,
+      z: rawX * sinY + rawZ * cosY
+    };
+  }
+
+  function aimDirection(p, input = {}, yaw = camYaw) {
+    let dir = cameraRelativeInput(input, yaw);
+    if (dir.x*dir.x + dir.z*dir.z < 0.04) {
+      const v = p.body.velocity;
+      const sp = Math.hypot(v.x, v.z);
+      if (sp > 0.4) dir = { x: v.x / sp, z: v.z / sp };
+      else dir = { x: -Math.sin(yaw), z: -Math.cos(yaw) };
+    } else {
+      const d = Math.hypot(dir.x, dir.z) || 1;
+      dir.x /= d; dir.z /= d;
+    }
+    return dir;
+  }
+
+  function tryDashForPlayer(p, input = {}, yaw = camYaw) {
+    if (!p || p.finished || !BDR.items) return false;
+    const now = performance.now();
+    const last = lastDashAt[p.id] || 0;
+    if (now - last < BDR.items.cfg.dashCooldownMs) return false;
+    const dir = aimDirection(p, input, yaw);
+    const imp = BDR.items.cfg.dashImpulse;
+    p.body.velocity.x += dir.x * imp;
+    p.body.velocity.z += dir.z * imp;
+    p.body.velocity.y += 1.5;
+    lastDashAt[p.id] = now;
+    dashActiveUntil[p.id] = now + 360; // body-slam window
+    p.mesh.scale.setScalar(1.25);
+    setTimeout(() => { try { p.mesh.scale.setScalar(1); } catch(e){} }, 220);
+    if (p.isMe && BDR.sound) BDR.sound.dash();
+    return true;
+  }
+
   function tryLocalDash() {
     const me = players.find(pp => pp.isMe);
-    if (!me || me.finished) return false;
+    return tryDashForPlayer(me, BDR.controls.state.input, camYaw);
+  }
+
+  function tryShootForPlayer(p, input = {}, yaw = camYaw) {
+    if (!p || p.finished || !BDR.items) return false;
     const now = performance.now();
-    const last = lastDashAt[me.id] || 0;
-    if (now - last < BDR.items.cfg.dashCooldownMs) return false;
-    const inp = BDR.controls.state.input;
-    let dx = inp.x, dz = inp.z;
-    if (dx*dx + dz*dz < 0.04) {
-      const v = me.body.velocity;
-      const sp = Math.hypot(v.x, v.z);
-      if (sp > 0.4) { dx = v.x / sp; dz = v.z / sp; }
-      else { dx = 0; dz = -1; }
-    } else {
-      const d = Math.hypot(dx, dz) || 1;
-      dx /= d; dz /= d;
-    }
-    const imp = BDR.items.cfg.dashImpulse;
-    me.body.velocity.x += dx * imp;
-    me.body.velocity.z += dz * imp;
-    me.body.velocity.y += 1.5;
-    lastDashAt[me.id] = now;
-    dashActiveUntil[me.id] = now + 360; // body-slam window
-    me.mesh.scale.setScalar(1.25);
-    setTimeout(() => { try { me.mesh.scale.setScalar(1); } catch(e){} }, 220);
-    if (BDR.sound) BDR.sound.dash();
+    const last = lastShotAt[p.id] || 0;
+    if (now - last < BDR.items.cfg.projCooldownMs) return false;
+    const dir = aimDirection(p, input, yaw);
+    const fromPos = new THREE.Vector3(
+      p.body.position.x + dir.x * (cfg.ballRadius + BDR.items.cfg.projRadius + 0.1),
+      p.body.position.y + 0.1,
+      p.body.position.z + dir.z * (cfg.ballRadius + BDR.items.cfg.projRadius + 0.1)
+    );
+    const colorInt = parseInt((p.color || '#ffaa00').slice(1), 16);
+    projectiles.push(BDR.items.makeProjectile(scene, physWorld, physWorld._mats.ballMat, p, fromPos, dir, colorInt));
+    lastShotAt[p.id] = now;
+    if (p.isMe && BDR.sound) BDR.sound.hit();
     return true;
+  }
+
+  function tryLocalShoot() {
+    const me = players.find(pp => pp.isMe);
+    return tryShootForPlayer(me, BDR.controls.state.input, camYaw);
   }
 
   function getDashCooldownRatio() {
@@ -709,6 +784,56 @@ BDR.game = (function() {
             }
           }
         }
+      } else if (hz.type === 'mine') {
+        if (hz.warn) hz.warn.material.opacity = 0.30 + Math.sin(t * 8) * 0.15;
+        const cx = hz.x * cs, cz = hz.y * cs;
+        if (now < hz.cooldownUntil) continue;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          if (dx*dx + dz*dz < (cs*0.36)*(cs*0.36) && p.body.position.y < 1.6) {
+            hz.cooldownUntil = now + 3500;
+            if (hz.mesh) hz.mesh.visible = false;
+            setTimeout(() => { try { hz.mesh.visible = true; } catch(e){} }, 2800);
+            if (BDR.items) BDR.items.spawnHitFlash(scene, { x: cx, y: 0.5, z: cz }, 0xff4757);
+            for (const q of players) {
+              if (q.finished) continue;
+              const qx = q.body.position.x - cx;
+              const qz = q.body.position.z - cz;
+              const d = Math.hypot(qx, qz);
+              if (d < cs * 1.25) {
+                const n = d || 1;
+                const power = 18 * (1 - d / (cs * 1.25));
+                q.body.velocity.x += (qx / n) * power;
+                q.body.velocity.z += (qz / n) * power;
+                q.body.velocity.y += 5;
+                q.hp = Math.max(0, q.hp - 18);
+              }
+            }
+            if (p.isMe && BDR.sound) BDR.sound.bump();
+            break;
+          }
+        }
+      } else if (hz.type === 'bumper') {
+        if (hz.mesh) hz.mesh.rotation.y = t * 1.7;
+        const cx = hz.x * cs, cz = hz.y * cs;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          const d = Math.hypot(dx, dz);
+          const r = cs * 0.28 + cfg.ballRadius;
+          if (d < r && p.body.position.y < 1.8) {
+            const n = d || 1;
+            p.body.velocity.x += (dx / n) * 13;
+            p.body.velocity.z += (dz / n) * 13;
+            p.body.velocity.y += 2.5;
+            p.body.position.x = cx + (dx / n) * r;
+            p.body.position.z = cz + (dz / n) * r;
+            if (p.isMe && BDR.sound && now - (p._lastBumperAt || 0) > 350) { BDR.sound.bump(); p._lastBumperAt = now; }
+          }
+        }
       } else if (hz.type === 'tp') {
         // Visual spin
         if (hz.spire) hz.spire.rotation.y = t * 2.4;
@@ -746,11 +871,11 @@ BDR.game = (function() {
       mazeData.flag.position.y = 4.4 + Math.sin(t * 2.5) * 0.06;
       mazeData.flag.rotation.y = Math.sin(t * 1.6) * 0.18;
     }
-    if (mazeData.pillar) {
+    if (goalOpen && mazeData.pillar) {
       mazeData.pillar.material.opacity = 0.25 + (Math.sin(t * 2.2) * 0.5 + 0.5) * 0.2;
     }
     if (mazeData.ring) {
-      mazeData.ring.material.opacity = 0.6 + (Math.sin(t * 3.2) * 0.5 + 0.5) * 0.3;
+      mazeData.ring.material.opacity = goalOpen ? 0.6 + (Math.sin(t * 3.2) * 0.5 + 0.5) * 0.3 : 0.28;
     }
   }
 
@@ -786,16 +911,30 @@ BDR.game = (function() {
             }
           }
         } else if (p.isMe) {
-          const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
+          const raw = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
+          const inp = cameraRelativeInput(raw, camYaw);
           if (running) applyInputToBody(p, p.body, inp, dt, isBodyOnGround(p.body));
+          const acts = BDR.controls.consumeActions ? BDR.controls.consumeActions() : { dash: false, shoot: false };
+          if (running && acts.dash) tryDashForPlayer(p, raw, camYaw);
+          if (running && acts.shoot) tryShootForPlayer(p, raw, camYaw);
         } else {
-          const inp = networkInputs[p.id] || { x: 0, z: 0 };
+          const raw = networkInputs[p.id] || { x: 0, z: 0, yaw: 0 };
+          const inp = cameraRelativeInput(raw, raw.yaw || 0);
           if (running) applyInputToBody(p, p.body, inp, dt, isBodyOnGround(p.body));
+          if (running && raw.dash) { tryDashForPlayer(p, raw, raw.yaw || 0); raw.dash = false; }
+          if (running && raw.shoot) { tryShootForPlayer(p, raw, raw.yaw || 0); raw.shoot = false; }
         }
       }
       if (BDR.items) BDR.items.update(scene, physWorld, players, projectiles, dt);
     } else {
-      const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
+      const acts = BDR.controls.consumeActions ? BDR.controls.consumeActions() : { dash: false, shoot: false };
+      const inp = {
+        x: BDR.controls.state.input.x,
+        z: BDR.controls.state.input.z,
+        yaw: camYaw,
+        dash: acts.dash,
+        shoot: acts.shoot
+      };
       BDR.network.sendInput(inp);
     }
 
@@ -821,7 +960,13 @@ BDR.game = (function() {
           if (dxp*dxp + dzp*dzp < 1.4*1.4) {
             pu.taken = true;
             pu.mesh.visible = false;
-            p.boostUntil = performance.now() + 2400;
+            if (pu.type === 'star') {
+              p.stars = Math.min(cfg.starsToOpenGoal, (p.stars || 0) + 1);
+              if (p.stars >= cfg.starsToOpenGoal) goalOpen = true;
+              updateGoalVisuals();
+            } else {
+              p.boostUntil = performance.now() + 2400;
+            }
             if (p.isMe && BDR.sound) BDR.sound.pickup();
           }
         }
@@ -872,6 +1017,8 @@ BDR.game = (function() {
 
     if (!isHost && lastNetSnap) applySnapshot(lastNetSnap);
 
+    updateGoalVisuals();
+
     // Goal detection + fall-out respawn safety
     if (running) {
       const goal = mazeData.goalPos;
@@ -880,7 +1027,7 @@ BDR.game = (function() {
         const dx = p.body.position.x - goal.x;
         const dz = p.body.position.z - goal.z;
         const d2 = dx*dx + dz*dz;
-        if (d2 < (cfg.cellSize * 0.32) * (cfg.cellSize * 0.32) && p.body.position.y < cfg.ballRadius + 0.6 && p.body.position.y > -3) {
+        if (goalOpen && (p.stars || 0) >= cfg.starsToOpenGoal && d2 < (cfg.cellSize * 0.32) * (cfg.cellSize * 0.32) && p.body.position.y < cfg.ballRadius + 0.6 && p.body.position.y > -3) {
           p.finished = true;
           finishedCount++;
           p.place = finishedCount;
@@ -918,81 +1065,11 @@ BDR.game = (function() {
       camera.position.lerp(desired, 0.20);
       camera.lookAt(new THREE.Vector3(target.x, target.y + 0.3, target.z));
 
-      // Adjust movement input based on camera yaw
-      const input = BDR.controls.state.input;
-      const rawX = input.x, rawZ = input.z;
-      const cosY = Math.cos(camYaw), sinY = Math.sin(camYaw);
-      // Rotate input vector by -camYaw
-      input.x = rawX * cosY - rawZ * sinY;
-      input.z = rawX * sinY + rawZ * cosY;
     }
-
-    // Mini-map render
-    drawMiniMap();
 
     if (isHost && onTick) onTick(makeSnapshot());
 
     renderer.render(scene, camera);
-  }
-
-  function drawMiniMap() {
-    if (!miniCtx || !maze) return;
-    const W = miniCanvas.width, H = miniCanvas.height;
-    miniCtx.clearRect(0, 0, W, H);
-    const totalW = maze.width * cfg.cellSize;
-    const totalH = maze.height * cfg.cellSize;
-    const pad = 6;
-    const sx = (W - pad*2) / totalW;
-    const sz = (H - pad*2) / totalH;
-    const offX = pad - cfg.cellSize/2 * sx;
-    const offZ = pad - cfg.cellSize/2 * sz;
-
-    miniCtx.strokeStyle = 'rgba(40,60,90,0.55)';
-    miniCtx.lineWidth = 1.0;
-    const cs = cfg.cellSize;
-    for (let y = 0; y < maze.height; y++) {
-      for (let x = 0; x < maze.width; x++) {
-        const c = maze.cells[y][x];
-        const x0 = (x*cs - cs/2) * sx + offX;
-        const y0 = (y*cs - cs/2) * sz + offZ;
-        const x1 = (x*cs + cs/2) * sx + offX;
-        const y1 = (y*cs + cs/2) * sz + offZ;
-        if (c.walls.N) { miniCtx.beginPath(); miniCtx.moveTo(x0,y0); miniCtx.lineTo(x1,y0); miniCtx.stroke(); }
-        if (c.walls.W) { miniCtx.beginPath(); miniCtx.moveTo(x0,y0); miniCtx.lineTo(x0,y1); miniCtx.stroke(); }
-        if (y === maze.height-1 && c.walls.S) { miniCtx.beginPath(); miniCtx.moveTo(x0,y1); miniCtx.lineTo(x1,y1); miniCtx.stroke(); }
-        if (x === maze.width-1 && c.walls.E) { miniCtx.beginPath(); miniCtx.moveTo(x1,y0); miniCtx.lineTo(x1,y1); miniCtx.stroke(); }
-      }
-    }
-    // Goal
-    const gx = maze.goalCell.x*cs * sx + offX;
-    const gy = maze.goalCell.y*cs * sz + offZ;
-    miniCtx.fillStyle = '#ffd166';
-    miniCtx.beginPath();
-    miniCtx.arc(gx, gy, 5.5, 0, Math.PI*2);
-    miniCtx.fill();
-    miniCtx.strokeStyle = '#fff'; miniCtx.lineWidth = 2;
-    miniCtx.stroke();
-
-    for (const p of players) {
-      if (!p.body) continue;
-      const px = p.body.position.x * sx + offX;
-      const py = p.body.position.z * sz + offZ;
-      miniCtx.fillStyle = p.color;
-      miniCtx.beginPath();
-      miniCtx.arc(px, py, p.isMe ? 5.5 : 4.2, 0, Math.PI*2);
-      miniCtx.fill();
-      if (p.isMe) {
-        miniCtx.strokeStyle = '#fff'; miniCtx.lineWidth = 2;
-        miniCtx.stroke();
-      } else {
-        miniCtx.strokeStyle = 'rgba(0,0,0,0.4)'; miniCtx.lineWidth = 1;
-        miniCtx.stroke();
-      }
-      if (p.finished) {
-        miniCtx.fillStyle = 'rgba(255,255,255,0.7)';
-        miniCtx.fillText('✓', px+4, py-4);
-      }
-    }
   }
 
   function makeSnapshot() {
@@ -1007,8 +1084,10 @@ BDR.game = (function() {
         finished: p.finished,
         place: p.place,
         finishTime: p.finishTime,
-        hp: p.hp
+        hp: p.hp,
+        stars: p.stars || 0
       })),
+      goalOpen,
       powerups: powerups.map(pu => pu.taken ? 1 : 0)
     };
   }
@@ -1038,6 +1117,7 @@ BDR.game = (function() {
         p.body.velocity.set(sp.vx, sp.vy, sp.vz);
       }
       p.hp = sp.hp; // Sync HP
+      p.stars = sp.stars || 0;
       if (sp.finished && !p.finished) {
         p.finished = true;
         p.place = sp.place;
@@ -1045,6 +1125,10 @@ BDR.game = (function() {
         p.mesh.visible = false;
         if (p.label) p.label.visible = false;
       }
+    }
+    if (typeof snap.goalOpen === 'boolean') {
+      goalOpen = snap.goalOpen;
+      updateGoalVisuals();
     }
     if (snap.powerups) {
       for (let i = 0; i < powerups.length && i < snap.powerups.length; i++) {
@@ -1142,8 +1226,8 @@ BDR.game = (function() {
     cfg, init, setup, startCountdown, startLoop,
     setNetworkInput, applyNetworkSnapshot,
     getRanking, getMyRank, getElapsed, getPlayers: () => players,
-    tryLocalDash, getDashCooldownRatio, getGoalInfo,
-    getMySpeed, getRaceStats,
+    tryLocalDash, tryLocalShoot, getDashCooldownRatio, getGoalInfo,
+    getMySpeed, getRaceStats, getMyStars, dropStarFromPlayer,
     manualEnd
   };
 })();
