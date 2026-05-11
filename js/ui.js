@@ -258,6 +258,18 @@ window.BDR = window.BDR || {};
         setTimeout(() => recalBtn.textContent = 'RESET', 700);
       };
     }
+    const flipBtn = $('btn-flip');
+    if (flipBtn) {
+      // Reflect current state visually
+      flipBtn.classList.toggle('active', !!(BDR.controls.GYRO && BDR.controls.GYRO.invertForwardBack));
+      flipBtn.onclick = () => {
+        if (!BDR.controls.toggleForwardBackInvert) return;
+        const inverted = BDR.controls.toggleForwardBackInvert();
+        flipBtn.classList.toggle('active', inverted);
+        flipBtn.textContent = inverted ? 'INV' : 'FLIP';
+        setTimeout(() => { flipBtn.textContent = 'FLIP'; }, 900);
+      };
+    }
     $('btn-quit').onclick = () => {
       BDR.network.destroy();
       $('pause-overlay').classList.add('hidden');

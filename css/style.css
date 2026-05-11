@@ -527,6 +527,27 @@ body::before {
 }
 .hud-recal:active { transform: translateY(2px); }
 
+.hud-flip {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 138px);
+  right: 14px;
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #51cf66, #36c46f);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: inherit;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.2);
+}
+.hud-flip:active { transform: translateY(2px); }
+.hud-flip.active { background: linear-gradient(135deg, #ff7a59, #ffb14d); }
+
 .hud-dash {
   position: absolute;
   bottom: calc(var(--safe-bottom) + 14px);

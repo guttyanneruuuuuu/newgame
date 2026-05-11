@@ -1,39 +1,41 @@
 /* ============================================================
    game.js - 3D ball-rolling maze game (Three.js + Cannon-es)
    ============================================================
-   Major fixes (PDCA iteration):
-   - Camera is FIXED orientation (looks toward -Z); never spins.
-   - Name labels are placed in the SCENE (not on ball mesh) so they
-     don't rotate with ball or clip into walls.
-   - Walls fully opaque, depthTest enabled (no see-through).
-   - Bigger 17x17 maze with arenas / hazards / pushers / mud.
-   - Player-vs-player physical collisions with bonus knockback.
-   - Mini-map / radar overlay.
+   v2 (controllability + bigger map + richer hazards):
+   - Large NON-SQUARE map (25 x 19 cells)
+   - Higher move force, stronger steering authority on ground,
+     low air control so falls don't spin out
+   - Camera: closer, slightly higher, smooth chase
+   - Hazards: spinner, bounce, mud, pusher, ICE, MOVER, LASER, TP
+   - Combat: stronger PvP knockback + body-slam multiplier when DASHing
+   - Body slam: holding/triggering DASH while in contact deals heavy
+     knockback (added to PvP collision authoritative pass)
    ============================================================ */
 window.BDR = window.BDR || {};
 
 BDR.game = (function() {
   const cfg = {
     cellSize: 6,
-    mazeW: 17,
-    mazeH: 17,
+    mazeW: 25,             // wider (rectangular!)
+    mazeH: 19,
     ballRadius: 0.55,
     ballMass: 1.0,
-    moveForce: 9.0,        // higher = more responsive
-    maxSpeed: 10.5,
-    airControl: 0.4,
-    cameraDist: 5.2,
-    cameraHeight: 3.4,    // raised so player can see ahead over walls
-    cameraLookAhead: 0.0,  // fixed camera; no look-ahead
-    fov: 78,
-    pvpKnockback: 6.5
+    moveForce: 13.5,       // stronger so steering feels crisp
+    maxSpeed: 12.5,
+    airControl: 0.25,      // low air authority -> predictable arcs
+    cameraDist: 4.6,
+    cameraHeight: 3.2,
+    cameraLookAhead: 0.0,
+    fov: 80,
+    pvpKnockback: 7.5,
+    slamMultiplier: 1.9    // dashing into someone hits ~2x harder
   };
 
   let renderer, scene, camera;
   let physWorld;
   let mazeMesh, mazeData, maze;
   let players = [];
-  let labelGroup = null;     // shared THREE.Group of label sprites in scene
+  let labelGroup = null;
   let myId = '';
   let isHost = true;
   let running = false;
@@ -52,6 +54,7 @@ BDR.game = (function() {
   let projectiles = [];
   let lastShotAt = {};
   let lastDashAt = {};
+  let dashActiveUntil = {};   // when dash effect lingers (for body-slam window)
   // Mini-map (2D radar) canvas
   let miniCanvas = null, miniCtx = null;
 
@@ -66,7 +69,7 @@ BDR.game = (function() {
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xcef0ff);
-    scene.fog = new THREE.Fog(0xcef0ff, 35, 120);
+    scene.fog = new THREE.Fog(0xcef0ff, 38, 140);
 
     camera = new THREE.PerspectiveCamera(cfg.fov, window.innerWidth / window.innerHeight, 0.1, 400);
     camera.position.set(0, 8, 12);
@@ -78,12 +81,12 @@ BDR.game = (function() {
     sun.position.set(40, 80, 30);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -90;
-    sun.shadow.camera.right = 90;
-    sun.shadow.camera.top = 90;
-    sun.shadow.camera.bottom = -90;
+    sun.shadow.camera.left = -110;
+    sun.shadow.camera.right = 110;
+    sun.shadow.camera.top = 110;
+    sun.shadow.camera.bottom = -110;
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 250;
+    sun.shadow.camera.far = 280;
     scene.add(sun);
     const fill = new THREE.DirectionalLight(0xc7e6ff, 0.35);
     fill.position.set(-30, 40, -20);
@@ -108,7 +111,7 @@ BDR.game = (function() {
     physWorld = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
     physWorld.broadphase = new CANNON.SAPBroadphase(physWorld);
     physWorld.allowSleep = false;
-    physWorld.defaultContactMaterial.friction = 0.25;
+    physWorld.defaultContactMaterial.friction = 0.30;
     physWorld.defaultContactMaterial.restitution = 0.15;
 
     const groundMat = new CANNON.Material('ground');
@@ -116,12 +119,12 @@ BDR.game = (function() {
     const wallMat = new CANNON.Material('wall');
 
     physWorld.addContactMaterial(new CANNON.ContactMaterial(groundMat, ballMat, {
-      friction: 0.35, restitution: 0.05
+      friction: 0.42, restitution: 0.05
     }));
     physWorld.addContactMaterial(new CANNON.ContactMaterial(wallMat, ballMat, {
       friction: 0.0, restitution: 0.55
     }));
-    // Ball-ball collisions: less friction, more bounce -> better bumping action
+    // Ball-ball collisions: less friction, more bounce
     physWorld.addContactMaterial(new CANNON.ContactMaterial(ballMat, ballMat, {
       friction: 0.02, restitution: 0.92
     }));
@@ -149,7 +152,6 @@ BDR.game = (function() {
   }
 
   function makeNameLabel(name) {
-    // High-resolution label drawn in CSS px units; sprite is in scene (not on ball)
     const lc = document.createElement('canvas');
     lc.width = 384; lc.height = 96;
     const lctx = lc.getContext('2d');
@@ -167,7 +169,7 @@ BDR.game = (function() {
     tex.minFilter = THREE.LinearFilter;
     const mat = new THREE.SpriteMaterial({
       map: tex,
-      depthTest: true,    // important: respect walls
+      depthTest: true,
       depthWrite: false,
       transparent: true
     });
@@ -189,8 +191,7 @@ BDR.game = (function() {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
-    // Pattern decals so rotation is visible (multiple stripes)
-    // Build a checker/stripe texture for the ball
+    // Texture so rotation is visible
     const cv = document.createElement('canvas');
     cv.width = cv.height = 256;
     const ctx2 = cv.getContext('2d');
@@ -200,7 +201,6 @@ BDR.game = (function() {
     for (let i = 0; i < 256; i += 64) {
       ctx2.fillRect(i, 0, 32, 256);
     }
-    // Tiny face on one pole
     ctx2.fillStyle = '#000';
     ctx2.beginPath(); ctx2.arc(96, 96, 9, 0, Math.PI*2); ctx2.fill();
     ctx2.beginPath(); ctx2.arc(160, 96, 9, 0, Math.PI*2); ctx2.fill();
@@ -228,7 +228,6 @@ BDR.game = (function() {
     body.position.set(sx, cfg.ballRadius + 0.5, sz);
     physWorld.addBody(body);
 
-    // Label sprite — added DIRECTLY to scene, follows body in tick().
     const label = makeNameLabel(player.name || 'Player');
     scene.add(label);
 
@@ -256,7 +255,9 @@ BDR.game = (function() {
         bot: p.isCPU ? BDR.ai.makeBot(p, p.skill || 0.7) : null,
         boostUntil: 0,
         respawnTimer: 0,
-        lastBumpAt: 0
+        lastBumpAt: 0,
+        onIce: false,
+        lastTpAt: 0
       });
     }
   }
@@ -265,14 +266,14 @@ BDR.game = (function() {
     powerups.forEach(pu => scene.remove(pu.mesh));
     powerups = [];
     const tried = new Set();
-    const N = 12; // more pickups in larger map
+    const N = 18; // more pickups in larger map
     for (let i = 0; i < N; i++) {
       let attempts = 0, x, y;
       do {
         x = Math.floor(Math.random() * maze.width);
         y = Math.floor(Math.random() * maze.height);
         attempts++;
-      } while ((tried.has(x + ',' + y) || (x === maze.goalCell.x && y === maze.goalCell.y)) && attempts < 20);
+      } while ((tried.has(x + ',' + y) || (x === maze.goalCell.x && y === maze.goalCell.y)) && attempts < 25);
       tried.add(x + ',' + y);
       const geo = new THREE.TorusGeometry(0.55, 0.18, 12, 24);
       const mat = new THREE.MeshStandardMaterial({
@@ -318,6 +319,7 @@ BDR.game = (function() {
     projectiles = [];
     lastShotAt = {};
     lastDashAt = {};
+    dashActiveUntil = {};
 
     // Build maze
     maze = BDR.generateMaze(mazeSeed, cfg.mazeW, cfg.mazeH);
@@ -338,7 +340,6 @@ BDR.game = (function() {
     raceStartedAt = 0;
     lastFrame = performance.now();
 
-    // Position camera initially behind local player (fixed orientation looking -Z)
     const me = players.find(pp => pp.isMe);
     if (me) {
       camera.position.set(me.body.position.x, me.body.position.y + cfg.cameraHeight, me.body.position.z + cfg.cameraDist);
@@ -374,18 +375,35 @@ BDR.game = (function() {
   }
 
   // ---------- Per-frame update ----------
-  function applyInputToBody(body, input, dt, isOnGround) {
-    // World-space input. Camera is fixed (looks -Z) so input.x = +x world,
-    // input.z = +z world. Player sees: tilt right -> ball goes right; tilt
-    // far edge down -> ball goes "up screen" = -z.
-    const force = isOnGround ? cfg.moveForce : cfg.moveForce * cfg.airControl;
+  function applyInputToBody(p, body, input, dt, isOnGround) {
+    // World-space input. Camera looks toward -Z.
+    let force = isOnGround ? cfg.moveForce : cfg.moveForce * cfg.airControl;
+    // ICE: lower steering authority when on ice (slip)
+    if (p && p.onIce) force *= 0.35;
     body.applyForce(new CANNON.Vec3(input.x * force, 0, input.z * force), body.position);
+
     const v = body.velocity;
     const hsp = Math.hypot(v.x, v.z);
-    if (hsp > cfg.maxSpeed) {
-      const k = cfg.maxSpeed / hsp;
+    // Boost active? slightly higher cap
+    const boosted = p && p.boostUntil && performance.now() < p.boostUntil;
+    const cap = boosted ? cfg.maxSpeed * 1.35 : cfg.maxSpeed;
+    if (hsp > cap) {
+      const k = cap / hsp;
       body.velocity.x *= k;
       body.velocity.z *= k;
+    }
+
+    // Active steering brake: when on ground & input is opposite to velocity,
+    // apply a small extra deceleration so reversing feels responsive
+    if (isOnGround && hsp > 1.5 && (input.x*input.x + input.z*input.z) > 0.05) {
+      const inLen = Math.hypot(input.x, input.z) || 1;
+      const ix = input.x/inLen, iz = input.z/inLen;
+      const vx = v.x/hsp, vz = v.z/hsp;
+      const dot = ix*vx + iz*vz;
+      if (dot < -0.2) {
+        body.velocity.x *= 0.93;
+        body.velocity.z *= 0.93;
+      }
     }
   }
 
@@ -449,8 +467,9 @@ BDR.game = (function() {
     me.body.velocity.z += dz * imp;
     me.body.velocity.y += 1.5;
     lastDashAt[me.id] = now;
+    dashActiveUntil[me.id] = now + 360; // body-slam window
     me.mesh.scale.setScalar(1.25);
-    setTimeout(() => { try { me.mesh.scale.setScalar(1); } catch(e){} }, 180);
+    setTimeout(() => { try { me.mesh.scale.setScalar(1); } catch(e){} }, 220);
     if (BDR.sound) BDR.sound.dash();
     return true;
   }
@@ -464,8 +483,8 @@ BDR.game = (function() {
     return Math.min(1, elapsed / BDR.items.cfg.dashCooldownMs);
   }
 
-  // PvP collision boost: when two balls collide hard, add extra knockback so
-  // bumping feels strong. This runs on host only (or solo) for fairness.
+  // PvP collision boost (host authoritative). Applies an extra knockback,
+  // and an even stronger one if either party is currently DASHing (body slam).
   function applyPvPKnockback(dt) {
     const r2 = (cfg.ballRadius * 2 + 0.05);
     const r2sq = r2 * r2;
@@ -481,32 +500,48 @@ BDR.game = (function() {
         const dy = a.body.position.y - b.body.position.y;
         const d2 = dx*dx + dz*dz + dy*dy;
         if (d2 < r2sq * 1.05) {
-          // Compute relative speed along separation axis
           const d = Math.sqrt(d2) || 0.0001;
           const nx = dx/d, ny = dy/d, nz = dz/d;
           const rvx = a.body.velocity.x - b.body.velocity.x;
           const rvy = a.body.velocity.y - b.body.velocity.y;
           const rvz = a.body.velocity.z - b.body.velocity.z;
           const approach = rvx*nx + rvy*ny + rvz*nz;
-          // a moving INTO b => approach < 0
           if (approach < -0.5) {
-            // Stronger bump for the faster mover
             const aSpd = Math.hypot(a.body.velocity.x, a.body.velocity.z);
             const bSpd = Math.hypot(b.body.velocity.x, b.body.velocity.z);
-            const power = cfg.pvpKnockback * (1 + Math.min(0.7, Math.max(aSpd, bSpd)/12));
-            // Push them apart along n
-            a.body.velocity.x += nx * power * 0.6;
-            a.body.velocity.z += nz * power * 0.6;
-            a.body.velocity.y += 1.0;
-            b.body.velocity.x -= nx * power * 0.6;
-            b.body.velocity.z -= nz * power * 0.6;
-            b.body.velocity.y += 1.0;
+            let power = cfg.pvpKnockback * (1 + Math.min(0.7, Math.max(aSpd, bSpd)/12));
+            // Body slam: dash currently active for either side?
+            const aSlam = (dashActiveUntil[a.id]||0) > now;
+            const bSlam = (dashActiveUntil[b.id]||0) > now;
+            if (aSlam || bSlam) power *= cfg.slamMultiplier;
+
+            // Slam attacker pushes target much harder; receiver gets little kickback
+            if (aSlam && !bSlam) {
+              b.body.velocity.x -= nx * power;
+              b.body.velocity.z -= nz * power;
+              b.body.velocity.y += 2.4;
+              a.body.velocity.x += nx * power * 0.2;
+              a.body.velocity.z += nz * power * 0.2;
+            } else if (bSlam && !aSlam) {
+              a.body.velocity.x += nx * power;
+              a.body.velocity.z += nz * power;
+              a.body.velocity.y += 2.4;
+              b.body.velocity.x -= nx * power * 0.2;
+              b.body.velocity.z -= nz * power * 0.2;
+            } else {
+              a.body.velocity.x += nx * power * 0.6;
+              a.body.velocity.z += nz * power * 0.6;
+              a.body.velocity.y += 1.0;
+              b.body.velocity.x -= nx * power * 0.6;
+              b.body.velocity.z -= nz * power * 0.6;
+              b.body.velocity.y += 1.0;
+            }
+
             a.lastBumpAt = now; b.lastBumpAt = now;
-            // Visual flash
             if (BDR.items && (now - (a._lastFlash||0)) > 200) {
               BDR.items.spawnHitFlash(scene,
                 { x: (a.body.position.x+b.body.position.x)/2, y: a.body.position.y+0.3, z: (a.body.position.z+b.body.position.z)/2 },
-                0xffffff);
+                (aSlam || bSlam) ? 0xffe26f : 0xffffff);
               a._lastFlash = now; b._lastFlash = now;
               if (BDR.sound && (a.isMe || b.isMe)) BDR.sound.bump();
             }
@@ -516,48 +551,49 @@ BDR.game = (function() {
     }
   }
 
-  // Hazards: spinners, bouncers, mud, pushers
+  // Hazards: spinners, bouncers, mud, pushers, ice, mover, laser, tp
   function applyHazards(dt) {
     const cs = cfg.cellSize;
     if (!mazeData.hazardMeshes) return;
     const t = performance.now() * 0.001;
+    const now = performance.now();
+
+    // Reset onIce flag each tick (re-check below)
+    for (const p of players) p.onIce = false;
+
     for (const hz of mazeData.hazardMeshes) {
       if (hz.type === 'spinner') {
         hz.angle += hz.speed * dt;
         hz.mesh.rotation.y = hz.angle;
-        // Sweep collision: bar covers ~cellSize*0.85 long, 0.45 wide
         const cx = hz.x * cs, cz = hz.y * cs;
         const cosA = Math.cos(hz.angle);
         const sinA = Math.sin(hz.angle);
-        const halfL = cs * 0.42;
+        const halfL = hz.halfL || cs * 0.42;
         const halfW = 0.40;
         for (const p of players) {
           if (p.finished) continue;
-          // Transform player position into bar local space
           const lx = (p.body.position.x - cx) * cosA + (p.body.position.z - cz) * sinA;
           const lz = -(p.body.position.x - cx) * sinA + (p.body.position.z - cz) * cosA;
           if (Math.abs(lx) < halfL + cfg.ballRadius && Math.abs(lz) < halfW + cfg.ballRadius && p.body.position.y < 1.6) {
-            // Knockback perpendicular to bar (along local z)
             const dirSign = lz > 0 ? 1 : -1;
             const wx = -sinA * dirSign;
             const wz = cosA * dirSign;
-            p.body.velocity.x += wx * 11;
-            p.body.velocity.z += wz * 11;
-            p.body.velocity.y += 2.0;
+            p.body.velocity.x += wx * 12;
+            p.body.velocity.z += wz * 12;
+            p.body.velocity.y += 2.2;
           }
         }
       } else if (hz.type === 'bounce') {
         const cx = hz.x * cs, cz = hz.y * cs;
-        // Visual pulse
         hz.mesh.scale.y = 1 + Math.sin(t * 5) * 0.12;
         for (const p of players) {
           if (p.finished) continue;
           const dx = p.body.position.x - cx;
           const dz = p.body.position.z - cz;
           if (dx*dx + dz*dz < (cs*0.42)*(cs*0.42) && p.body.position.y < 1.0) {
-            if (performance.now() - (p._lastBouncedAt||0) > 400) {
-              p.body.velocity.y = Math.max(p.body.velocity.y, 11);
-              p._lastBouncedAt = performance.now();
+            if (now - (p._lastBouncedAt||0) > 400) {
+              p.body.velocity.y = Math.max(p.body.velocity.y, hz.power || 11);
+              p._lastBouncedAt = now;
               if (p.isMe && BDR.sound) BDR.sound.bounce();
             }
           }
@@ -569,26 +605,128 @@ BDR.game = (function() {
           const dx = p.body.position.x - cx;
           const dz = p.body.position.z - cz;
           if (dx*dx + dz*dz < (cs*0.42)*(cs*0.42) && p.body.position.y < 1.0) {
-            // Heavy damping for one frame
-            p.body.velocity.x *= 0.88;
-            p.body.velocity.z *= 0.88;
+            p.body.velocity.x *= 0.86;
+            p.body.velocity.z *= 0.86;
           }
         }
       } else if (hz.type === 'pusher') {
         const cx = hz.x * cs, cz = hz.y * cs;
         const dirVecs = [{x:0,z:-1},{x:1,z:0},{x:0,z:1},{x:-1,z:0}];
         const dv = dirVecs[hz.dir];
+        const pwr = hz.power || 1.0;
         for (const p of players) {
           if (p.finished) continue;
           const dx = p.body.position.x - cx;
           const dz = p.body.position.z - cz;
           if (dx*dx + dz*dz < (cs*0.42)*(cs*0.42) && p.body.position.y < 1.0) {
-            p.body.velocity.x += dv.x * 0.9;
-            p.body.velocity.z += dv.z * 0.9;
+            p.body.velocity.x += dv.x * pwr;
+            p.body.velocity.z += dv.z * pwr;
+          }
+        }
+      } else if (hz.type === 'ice') {
+        const cx = hz.x * cs, cz = hz.y * cs;
+        const r = cs * 0.475;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          if (Math.abs(dx) < r && Math.abs(dz) < r && p.body.position.y < 1.0) {
+            p.onIce = true;
+            // Reduce damping for that frame -> slidy feel
+            p.body.linearDamping = 0.04;
+          }
+        }
+      } else if (hz.type === 'mover') {
+        const offset = Math.sin(t * hz.speed + hz.phase) * hz.amp;
+        if (hz.axis === 'x') {
+          hz.mesh.position.x = hz.baseX + offset;
+        } else {
+          hz.mesh.position.z = hz.baseZ + offset;
+        }
+        // Bounce balls that touch it (no real physics body — manual AABB push)
+        const mx = hz.mesh.position.x, mz = hz.mesh.position.z;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - mx;
+          const dz = p.body.position.z - mz;
+          const r = 0.6 + cfg.ballRadius;
+          if (Math.abs(dx) < r && Math.abs(dz) < r && p.body.position.y < 2.0) {
+            const d = Math.hypot(dx, dz) || 0.0001;
+            const nx = dx/d, nz = dz/d;
+            p.body.velocity.x += nx * 9;
+            p.body.velocity.z += nz * 9;
+            p.body.velocity.y += 1.4;
+            // Nudge out of overlap
+            p.body.position.x = mx + nx * r;
+            p.body.position.z = mz + nz * r;
+          }
+        }
+      } else if (hz.type === 'laser') {
+        // Phase: half period ON, half OFF
+        const phase = ((now + hz.phase) % hz.period) / hz.period; // 0..1
+        const on = phase < 0.5;
+        if (hz.mesh && hz.mesh.material) {
+          hz.mesh.material.opacity = on ? (0.6 + Math.sin(now*0.04)*0.2) : 0.10;
+          hz.mesh.material.color.setHex(on ? 0xff5a4d : 0x6a8aa6);
+        }
+        if (!on) continue;
+        // Rectangle along axis between posts
+        const cx = hz.x * cs, cz = hz.y * cs;
+        const halfL = hz.length / 2;
+        const ax = hz.axis === 'x' ? 1 : 0;
+        const az = 1 - ax;
+        for (const p of players) {
+          if (p.finished) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          // Project onto axis
+          const along = ax * dx + az * dz;
+          const across = az * dx + ax * dz;
+          if (Math.abs(along) < halfL && Math.abs(across) < 0.4 + cfg.ballRadius && p.body.position.y < 2.0) {
+            // Push perpendicular & up
+            const sign = across >= 0 ? 1 : -1;
+            const px = az * sign;
+            const pz = ax * sign;
+            p.body.velocity.x += px * 14;
+            p.body.velocity.z += pz * 14;
+            p.body.velocity.y += 3.2;
+            if (p.isMe && BDR.sound && (now - (p._lastLaserAt||0) > 400)) {
+              BDR.sound.bump(); p._lastLaserAt = now;
+            }
+          }
+        }
+      } else if (hz.type === 'tp') {
+        // Visual spin
+        if (hz.spire) hz.spire.rotation.y = t * 2.4;
+        if (hz.halo)  hz.halo.material.opacity = 0.45 + Math.sin(t*4)*0.15;
+        const cx = hz.x * cs, cz = hz.y * cs;
+        if (now < hz.cooldownUntil) continue;
+        const r2 = (cs*0.34)*(cs*0.34);
+        for (const p of players) {
+          if (p.finished) continue;
+          if (now - (p.lastTpAt||0) < 1500) continue;
+          const dx = p.body.position.x - cx;
+          const dz = p.body.position.z - cz;
+          if (dx*dx + dz*dz < r2 && p.body.position.y < 1.0) {
+            const tx = hz.tx * cs;
+            const tz = hz.ty * cs;
+            p.body.position.set(tx, cfg.ballRadius + 0.6, tz);
+            // Preserve some forward speed
+            p.body.velocity.set(p.body.velocity.x*0.4, 1.0, p.body.velocity.z*0.4);
+            p.lastTpAt = now;
+            hz.cooldownUntil = now + 250;
+            if (BDR.items) BDR.items.spawnHitFlash(scene, { x: tx, y: 0.6, z: tz }, 0xffffff);
+            if (p.isMe && BDR.sound) BDR.sound.pickup();
           }
         }
       }
     }
+
+    // Restore default damping for non-ice players (keep them snappy)
+    for (const p of players) {
+      if (!p.onIce) p.body.linearDamping = 0.18;
+    }
+
     // Goal flag wave
     if (mazeData.flag) {
       mazeData.flag.position.y = 4.4 + Math.sin(t * 2.5) * 0.06;
@@ -603,13 +741,12 @@ BDR.game = (function() {
   }
 
   function tick(dt) {
-    // Inputs per player
     if (isHost) {
       for (const p of players) {
         if (p.finished) continue;
         if (p.isCPU) {
           const inp = BDR.ai.tick(p.bot, maze, cfg.cellSize, p.body, maze.goalCell, dt, players, p.id);
-          if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
+          if (running) applyInputToBody(p, p.body, inp, dt, isBodyOnGround(p.body));
           if (running) tryCPUShoot(p);
           // CPU dash when ramming and within close range to target
           if (running && inp.ramming && BDR.items) {
@@ -621,25 +758,25 @@ BDR.game = (function() {
                 const ddz = target.body.position.z - p.body.position.z;
                 const dd = Math.hypot(ddx, ddz);
                 if (dd < cfg.cellSize * 1.6) {
-                  // Dash toward target
                   const nrm = dd || 1;
                   const dx = ddx / nrm, dz = ddz / nrm;
                   p.body.velocity.x += dx * BDR.items.cfg.dashImpulse * 0.85;
                   p.body.velocity.z += dz * BDR.items.cfg.dashImpulse * 0.85;
                   p.body.velocity.y += 1.0;
                   lastDashAt[p.id] = performance.now();
+                  dashActiveUntil[p.id] = performance.now() + 320;
                   p.mesh.scale.setScalar(1.2);
-                  setTimeout(() => { try { p.mesh.scale.setScalar(1); } catch(e){} }, 180);
+                  setTimeout(() => { try { p.mesh.scale.setScalar(1); } catch(e){} }, 200);
                 }
               }
             }
           }
         } else if (p.isMe) {
           const inp = { x: BDR.controls.state.input.x, z: BDR.controls.state.input.z };
-          if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
+          if (running) applyInputToBody(p, p.body, inp, dt, isBodyOnGround(p.body));
         } else {
           const inp = networkInputs[p.id] || { x: 0, z: 0 };
-          if (running) applyInputToBody(p.body, inp, dt, isBodyOnGround(p.body));
+          if (running) applyInputToBody(p, p.body, inp, dt, isBodyOnGround(p.body));
         }
       }
       if (BDR.items) BDR.items.update(scene, physWorld, players, projectiles, dt);
@@ -654,8 +791,8 @@ BDR.game = (function() {
     // PvP knockback (host authoritative)
     if (isHost) applyPvPKnockback(dt);
 
-    // Physics step
-    physWorld.step(1/60, dt, 3);
+    // Physics step (substep for stability at higher speeds)
+    physWorld.step(1/60, dt, 4);
 
     // Powerup pickups
     for (const p of players) {
@@ -679,7 +816,7 @@ BDR.game = (function() {
         const v = p.body.velocity;
         const sp = Math.hypot(v.x, v.z);
         if (sp > 0.4) {
-          p.body.applyForce(new CANNON.Vec3(v.x/sp * 11, 0, v.z/sp * 11), p.body.position);
+          p.body.applyForce(new CANNON.Vec3(v.x/sp * 13, 0, v.z/sp * 13), p.body.position);
         }
       }
     }
@@ -693,15 +830,13 @@ BDR.game = (function() {
       }
     }
 
-    // Sync visuals from physics + label position (label lives in scene)
+    // Sync visuals from physics + label position
     for (const p of players) {
       if (!p.body) continue;
       p.mesh.position.copy(p.body.position);
       p.mesh.quaternion.copy(p.body.quaternion);
-      // Label tracks ball but doesn't inherit rotation
       if (p.label) {
         p.label.position.set(p.body.position.x, p.body.position.y + cfg.ballRadius + 0.95, p.body.position.z);
-        // Hide label if finished
         p.label.visible = !p.finished;
       }
     }
@@ -716,7 +851,6 @@ BDR.game = (function() {
         const dx = p.body.position.x - goal.x;
         const dz = p.body.position.z - goal.z;
         const d2 = dx*dx + dz*dz;
-        // Only count as finished if NEAR the goal hole (not from falling off the map)
         if (d2 < (cfg.cellSize * 0.32) * (cfg.cellSize * 0.32) && p.body.position.y < cfg.ballRadius + 0.6 && p.body.position.y > -3) {
           p.finished = true;
           finishedCount++;
@@ -726,7 +860,6 @@ BDR.game = (function() {
           if (p.label) p.label.visible = false;
           if (p.isMe && BDR.sound) BDR.sound.goal();
         }
-        // Respawn if fallen off the world
         if (isHost && p.body.position.y < -10) {
           const sc = p.startCell || maze.startCells[0];
           p.body.position.set(sc.x * cfg.cellSize, cfg.ballRadius + 1.5, sc.y * cfg.cellSize);
@@ -737,33 +870,23 @@ BDR.game = (function() {
       if (finishedCount >= players.length) endRace();
     }
 
-    // ---- Camera: FIXED orientation, follows local player ----
-    // Camera is positioned BEHIND the player along +Z, looking -Z. No yaw/spin.
+    // ---- Camera ----
     const me = players.find(pp => pp.isMe);
     if (me) {
       const target = new THREE.Vector3(me.body.position.x, me.body.position.y, me.body.position.z);
-      // If player is falling (y<0), pull camera down with them so they stay in view.
       const fallOffset = Math.min(0, me.body.position.y) * 0.6;
       const desired = new THREE.Vector3(
         target.x,
         Math.max(target.y + cfg.cameraHeight + fallOffset, -2),
         target.z + cfg.cameraDist
       );
-      camera.position.lerp(desired, 0.18);
-      camera.lookAt(new THREE.Vector3(target.x, target.y + 0.4, target.z));
-
-      // Look-ahead "see-through" effect: walls very close in front of camera
-      // (between camera and player) get pushed downward visually so player sees
-      // ahead without losing the ball. We do this lightly by raycasting.
-      // Performance: only the few walls overlapping the camera-player segment.
-      // Simpler approach: dim walls within near-camera frustum band by adjusting
-      // their material dynamically — skipped for now to avoid GC churn.
+      camera.position.lerp(desired, 0.20);
+      camera.lookAt(new THREE.Vector3(target.x, target.y + 0.3, target.z));
     }
 
     // Mini-map render
     drawMiniMap();
 
-    // Host broadcast snapshot
     if (isHost && onTick) onTick(makeSnapshot());
 
     renderer.render(scene, camera);
@@ -773,9 +896,6 @@ BDR.game = (function() {
     if (!miniCtx || !maze) return;
     const W = miniCanvas.width, H = miniCanvas.height;
     miniCtx.clearRect(0, 0, W, H);
-    // Background
-    miniCtx.fillStyle = 'rgba(255,255,255,0.0)';
-    miniCtx.fillRect(0, 0, W, H);
     const totalW = maze.width * cfg.cellSize;
     const totalH = maze.height * cfg.cellSize;
     const pad = 6;
@@ -784,9 +904,8 @@ BDR.game = (function() {
     const offX = pad - cfg.cellSize/2 * sx;
     const offZ = pad - cfg.cellSize/2 * sz;
 
-    // Walls (dim lines)
     miniCtx.strokeStyle = 'rgba(40,60,90,0.55)';
-    miniCtx.lineWidth = 1.2;
+    miniCtx.lineWidth = 1.0;
     const cs = cfg.cellSize;
     for (let y = 0; y < maze.height; y++) {
       for (let x = 0; x < maze.width; x++) {
@@ -811,7 +930,6 @@ BDR.game = (function() {
     miniCtx.strokeStyle = '#fff'; miniCtx.lineWidth = 2;
     miniCtx.stroke();
 
-    // Players
     for (const p of players) {
       if (!p.body) continue;
       const px = p.body.position.x * sx + offX;
@@ -943,16 +1061,13 @@ BDR.game = (function() {
     return { total, finished, remaining: total - finished };
   }
 
-  // Returns { angle: radians (0=up screen, +x=right), distance: meters }
   function getGoalInfo() {
     const me = players.find(pp => pp.isMe);
     if (!me || !mazeData) return { angle: 0, distance: 0, finished: true };
     if (me.finished) return { angle: 0, distance: 0, finished: true };
     const g = mazeData.goalPos;
-    // Camera looks toward -z, so "up screen" = -z. Right of screen = +x.
     const dx = g.x - me.body.position.x;
     const dz = g.z - me.body.position.z;
-    // Screen-relative: x = dx, y(up) = -dz. atan2 of (x, y) gives angle CW from up.
     const angle = Math.atan2(dx, -dz);
     const distance = Math.hypot(dx, dz);
     return { angle, distance, finished: false };

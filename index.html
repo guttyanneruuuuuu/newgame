@@ -109,11 +109,12 @@
       <h2>あそびかた</h2>
       <ul class="howto-list">
         <li><b>目的:</b> 3D迷路を転がってゴールの穴に最初に落ちた人の勝ち！</li>
-        <li><b>ジャイロ:</b> スマホの<b>奥(上端)を下げる</b>と画面の<b>上</b>へ進む。直感どおり！</li>
-        <li><b>PCの方:</b> WASD / 矢印キーで操作。スペースで<b>ダッシュ体当たり</b>。</li>
+        <li><b>ジャイロ:</b> スマホの<b>奥(上端)を下げる</b>と画面の<b>上</b>へ進みます。逆に感じたらHUDの「FLIP」ボタンで反転できます。</li>
+        <li><b>キャリブレ:</b> 「RESET」ボタンで今の姿勢を「真ん中」に再設定。</li>
+        <li><b>PCの方:</b> WASD / 矢印キーで移動。スペースで<b>ダッシュ体当たり</b>。</li>
         <li><b>視点:</b> 固定方位の三人称視点（カメラは回らない）。</li>
-        <li><b>妨害:</b> 体当たり＆DASHボタンで他のボールを弾けるよ。</li>
-        <li><b>ステージ:</b> 大迷路にスピナー、バネ床、ぬかるみ、押し出しゾーン。</li>
+        <li><b>妨害:</b> 体当たり＆DASHで他のボールを弾けます。DASH中の体当たり=<b>ボディスラム</b>でさらに強力！</li>
+        <li><b>ステージ:</b> 大型25×19の長方形マップ。スピナー／バネ床／ぬかるみ／押し出し／<b>氷</b>／<b>動く壁</b>／<b>レーザー</b>／<b>テレポート</b>。</li>
         <li><b>定員:</b> 1部屋6人まで。CPUで埋めて遊ぶこともできるよ。</li>
       </ul>
       <button class="btn btn-primary" id="btn-howto-back">OK</button>
@@ -143,6 +144,7 @@
       <div class="hud-leaderboard" id="hud-leaderboard"></div>
       <button class="hud-pause" id="btn-pause">⏸</button>
       <button class="hud-recal" id="btn-recal" title="ジャイロ基準を今の姿勢にリセット">RESET</button>
+      <button class="hud-flip" id="btn-flip" title="前後の傾きを反転">FLIP</button>
     <button class="hud-dash" id="btn-dash" title="ダッシュ体当たり">
       <span class="hud-dash-label">DASH</span>
       <svg class="hud-dash-cool" viewBox="0 0 36 36">
